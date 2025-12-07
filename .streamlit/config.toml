@@ -1,0 +1,21 @@
+[server]
+headless = true  # Set this to true if running on a remote server (e.g., for deployment)
+
+[theme]
+
+base = "dark"  # Use "dark" for dark mode
+primaryColor = "#D1442A"  # Customize primary color (e.g., buttons, headers)
+backgroundColor = "#D9D8D4"  # Customize background color
+secondaryBackgroundColor = "#F2F1EF"  # Background of widgets
+textColor = "#413F3D"  # Text color
+font = "sans serif"  # Choose between "sans serif" and "serif"
+
+[runner]
+magicEnabled = true  # Automatically render some code as Streamlit elements
+
+[client]
+toolbarMode = "minimal"
+
+[browser]
+gatherUsageStats = false  # Disable usage stats tracking (recommended for privacy)
+
