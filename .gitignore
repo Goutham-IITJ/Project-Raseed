@@ -3,3 +3,4 @@ venv
 .env
 google_creds.json
 invoicegpt_db.db
+wallet_key.json

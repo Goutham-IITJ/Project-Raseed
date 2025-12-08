@@ -2,7 +2,7 @@ import streamlit as st
 from langchain_community.utilities import SQLDatabase
 from langchain_community.agent_toolkits import create_sql_agent
 from langchain_google_genai import ChatGoogleGenerativeAI
-from database_files.sqlite_db import sanitize_email, check_empty_db
+from database_files.sqlite_db import sanitize_email
 from dotenv import load_dotenv
 from PIL import Image
 import time
@@ -10,92 +10,114 @@ import os
 
 load_dotenv()
 
-# Setup Session State
+# --- SETUP HEADER ---
+st.header("Ask Raseed")
+st.caption("Your Personal Financial Aide • Powered by Gemini Agent")
+
+# Setup Session State for Chat History
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+# Initial Greeting (Only once)
 if not st.session_state.messages:
-    first_name = st.session_state['user_info'].get('name', 'User').split()[0]
-    st.session_state.messages.append({
-        "role": "assistant",
-        "content": f"Hi {first_name}, I am Raseed AI. I can analyze your database. Try asking: 'Show me all items in the last invoice'."
-    })
+    user_name = st.session_state['user_info'].get('name', 'User').split()[0]
+    welcome_msg = f"Hi {user_name}! I've analyzed your receipts. Ask me about your spending habits, recent purchases, or inventory."
+    st.session_state.messages.append({"role": "assistant", "content": welcome_msg})
 
-# Connect to Local SQLite Database
-sanitized_email = sanitize_email(st.session_state['user_info'].get('email'))
-invoices_table = f"invoices_{sanitized_email}"
-line_items_table = f"line_items_{sanitized_email}"
-
-db = SQLDatabase.from_uri(
-    'sqlite:///invoicegpt_db.db',
-    include_tables=[invoices_table, line_items_table]
-)
-
-img_avatar = Image.open('images/invoicegpt_icon.png')
-
-st.header("Ask Raseed")
-st.caption("Powered by Gemini 2.5 Flash | SQL Agent")
-
-# Display History
-for message in st.session_state.messages:
-    with st.chat_message(message["role"], avatar=img_avatar if message["role"]=="assistant" else None):
-        st.markdown(message["content"])
-
-@st.cache_resource(show_spinner=False)
-def initialize_agent():
-    # --- FIX: Using the model confirmed in your list ---
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash", 
-        temperature=0, 
-        google_api_key=os.getenv("GOOGLE_API_KEY")
-    )
+# --- CONNECT TO DATABASE ---
+try:
+    user_email = st.session_state['user_info'].get('email')
+    sanitized_email = sanitize_email(user_email)
     
-    custom_prefix = """You are an expert financial analyst agent designed to interact with a SQL database for Project Raseed.
+    # We dynamically select ONLY the user's tables to keep data safe/focused
+    db = SQLDatabase.from_uri(
+        'sqlite:///invoicegpt_db.db',
+        include_tables=[f"invoices_{sanitized_email}", f"line_items_{sanitized_email}"]
+    )
+except Exception as e:
+    st.error(f"Database Connection Error: {e}")
+    st.stop()
+
+# --- INITIALIZE AGENT ---
+@st.cache_resource
+def get_agent():
+    # 1. Setup Gemini
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-flash-latest",
+        temperature=0,
+        google_api_key=os.getenv("GOOGLE_API_KEY"),
+        convert_system_message_to_human=True
+    )
+
+    # 2. Define the "Brain" (System Prompt)
+    prefix = f"""
+    You are 'Raseed', an expert home finance assistant. 
+    You are querying a SQL database of receipts for user: {user_email}.
+
+    DATABASE SCHEMA:
+    - invoices_{sanitized_email}: Contains summary data (merchant, date, total, category).
+    - line_items_{sanitized_email}: Contains specific products purchased (milk, bread, etc.).
 
     CRITICAL INSTRUCTIONS:
-    1. When asked for a list of items (e.g., "what did I buy?", "full list"), NEVER use 'LIMIT 1'. Always fetch ALL relevant rows.
-    2. If the user asks about the "last receipt" or "last purchase", find the invoice with the most recent 'invoice_date' or highest 'id', and join with line_items to list products.
-    3. Always format your final answer as a readable list or summary.
+    1. **Categorization:** If asked about "Groceries" or "Dining", query the 'category' column.
+    2. **Inventory:** If asked "Do I have X?", check 'line_items' for recent purchases of X.
+    3. **Format:** ALWAYS end your response with "Final Answer: [Your response here]".
+    4. **Privacy:** Never reveal data from other tables/users.
     
-    Given an input question, create a syntactically correct SQLite query to run, then look at the results of the query and return the answer.
+    If you get a parsing error, just output the answer naturally.
     """
 
-    agent = create_sql_agent(
+    # 3. Create Agent with Error Handling
+    return create_sql_agent(
         llm=llm,
         db=db,
         agent_type="zero-shot-react-description",
-        prefix=custom_prefix,
+        prefix=prefix,
         verbose=True,
-        handle_parsing_errors=True
+        # CRITICAL FIX: This tells the agent how to handle "chatty" responses
+        agent_executor_kwargs={
+            "handle_parsing_errors": True 
+        }
     )
-    return agent
 
-agent = initialize_agent()
-
-def make_output(prompt):
-    conversation_history = f"User Question: {prompt}"
+agent = get_agent()
+# --- CHAT INTERFACE ---
+# Display history
+for msg in st.session_state.messages:
+    # Use different avatars for user vs assistant
+    avatar = "images/invoicegpt_icon.png" if msg["role"] == "assistant" else None
+    if msg["role"] == "assistant" and not os.path.exists(avatar): avatar = "🤖" # Fallback
     
-    try:
-        output = agent.invoke({"input": conversation_history})
-        return output['output']
-    except Exception as e:
-        print(f"-------- AGENT ERROR --------\n{e}\n-----------------------------")
-        return "I'm having trouble analyzing the data right now. Please try rephrasing."
+    with st.chat_message(msg["role"], avatar=avatar):
+        st.markdown(msg["content"])
 
-def modify_output(input_text):
-    for text in input_text.split():
-        yield text + " "
-        time.sleep(0.05)
-
-if prompt := st.chat_input("Ask about your expenses..."):
+# Handle User Input
+if prompt := st.chat_input("Ex: 'How much did I spend on Dining this month?'"):
+    # 1. Show User Message
+    st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
-    st.session_state.messages.append({"role": "user", "content": prompt})
 
-    with st.spinner("Raseed is thinking..."):
-        response = make_output(prompt)
-
-    with st.chat_message("assistant", avatar=img_avatar):
-        st.write_stream(modify_output(response))
-
-    st.session_state.messages.append({"role": "assistant", "content": response})
+    # 2. Generate Response
+    with st.chat_message("assistant", avatar="images/invoicegpt_icon.png"):
+        with st.spinner("Raseed is thinking..."):
+            try:
+                # Prepare context
+                response = agent.invoke({"input": prompt})
+                output_text = response['output']
+                
+                # Simulate typing effect
+                message_placeholder = st.empty()
+                full_response = ""
+                for chunk in output_text.split():
+                    full_response += chunk + " "
+                    time.sleep(0.05)
+                    message_placeholder.markdown(full_response + "▌")
+                message_placeholder.markdown(full_response)
+                
+                # Save to history
+                st.session_state.messages.append({"role": "assistant", "content": full_response})
+                
+            except Exception as e:
+                st.error("I ran into an issue analyzing that. Please try rephrasing.")
+                print(f"Agent Error: {e}")

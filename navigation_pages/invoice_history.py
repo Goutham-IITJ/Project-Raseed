@@ -3,22 +3,30 @@ from database_files.sqlite_db import query_db, delete_data
 import os
 import pandas as pd
 import datetime
-from PIL import Image
+from utilities.wallet_helper import create_jwt_link, create_class_if_not_exists
 
 # --- LOCAL CONFIGURATION ---
 UPLOAD_DIR = "uploaded_invoices"
 supported_extensions = ('.jpg', '.jpeg', '.png', '.pdf')
 
 st.header("Recent Receipts")
-st.caption("View your locally processed receipts.")
 
 # Helper to get user folder
 user_email = st.session_state['user_info'].get('email')
 user_folder = os.path.join(UPLOAD_DIR, user_email)
 
-# Create folder if it doesn't exist to prevent errors
 if not os.path.exists(user_folder):
     os.makedirs(user_folder)
+
+# --- WALLET SETUP ---
+# We try to ensure the Wallet Class exists when the page loads
+if "wallet_class_checked" not in st.session_state:
+    try:
+        create_class_if_not_exists()
+        st.session_state["wallet_class_checked"] = True
+    except Exception as e:
+        # Don't crash the app if wallet creds are missing/wrong
+        print(f"Wallet Init Warning: {e}")
 
 @st.dialog(title="Receipt Preview", width="large")
 def preview(file_path):
@@ -37,36 +45,58 @@ def invoice_attributes(filename):
 
     if invoice_data:
         st.subheader("Receipt Details")
-        # Define columns matching your DB schema
-        invoice_columns = ['ID', 'File Name', 'Invoice #', 'Date', 'Due Date', 'Seller',
-                           'Buyer', 'PO #', 'Subtotal', 'Service Charge', 'Net',
-                           'Discount', 'Tax', 'Rate', 'Shipping', 'Total', 'Currency', 'Terms',
-                           'Method', 'Bank', 'Notes', 'Ship Addr', 'Bill Addr']
         
-        # Safe dataframe creation
+        # Updated Columns to match new DB Schema (including Category)
+        invoice_columns = [
+            'ID', 'File Name', 'Category', 'Invoice #', 'Date', 'Due Date', 'Seller',
+            'Buyer', 'PO #', 'Subtotal', 'Service Charge', 'Net',
+            'Discount', 'Tax', 'Rate', 'Shipping', 'Total', 'Currency', 'Terms',
+            'Method', 'Bank', 'Notes', 'Ship Addr', 'Bill Addr'
+        ]
+        
+        # Create DataFrame
         if len(invoice_data) == len(invoice_columns):
              df = pd.DataFrame([invoice_data], columns=invoice_columns)
         else:
-             # Fallback if schema doesn't match perfectly
              df = pd.DataFrame([invoice_data])
              
-        st.dataframe(df)
+        st.dataframe(df.T) # Transposed for easier reading
+
+        # --- WALLET BUTTON SECTION ---
+        st.divider()
+        col_wal1, col_wal2 = st.columns([1, 2])
+        
+        with col_wal1:
+            st.markdown("### 📲 Actions")
+        
+        with col_wal2:
+            # Generate the specific pass link for THIS receipt
+            try:
+                if st.button("Generate Wallet Pass", key="gen_pass"):
+                    with st.spinner("Minting Pass..."):
+                        wallet_link = create_jwt_link(invoice_data, line_items_data)
+                        
+                        # Show the official "Add to Google Wallet" style
+                        st.success("Pass Ready!")
+                        st.link_button("Add to Google Wallet", wallet_link, type="primary")
+                        st.caption("Click to save this receipt to your phone.")
+                        
+            except Exception as e:
+                st.error(f"Wallet Error: {e}")
+                st.caption("Check your wallet_key.json and Issuer ID.")
 
     if line_items_data:
-        st.subheader("Line Items (Inventory)")
+        st.divider()
+        st.subheader("Line Items")
         line_items_columns = ['ID', 'File Name', 'Invoice ID', 'Product', 'Qty', 'Price']
         df_items = pd.DataFrame(line_items_data, columns=line_items_columns)
         st.dataframe(df_items)
-    else:
-        st.info("No line items detected.")
 
 @st.dialog(title="Delete Receipt", width="small")
 def delete_invoice(file_path, name):
     st.warning(f"Delete {name}?")
     if st.button("Yes, Delete"):
-        # 1. Delete from DB
         delete_data(name, user_email)
-        # 2. Delete local file
         if os.path.exists(file_path):
             os.remove(file_path)
         st.success("Deleted!")
@@ -75,35 +105,35 @@ def delete_invoice(file_path, name):
 # --- LIST LOCAL FILES ---
 try:
     files = os.listdir(user_folder)
-    # Filter for valid extensions
     files = [f for f in files if f.lower().endswith(supported_extensions)]
     
     if files:
-        # Create header columns
+        # Table Header
         col1, col2, col3 = st.columns([3, 2, 3])
         col1.caption("Receipt Name")
         col2.caption("Date Processed")
         col3.caption("Actions")
+        st.divider()
         
         for filename in files:
             file_path = os.path.join(user_folder, filename)
-            
-            # Get file modification time
             mod_time = os.path.getmtime(file_path)
             date_str = datetime.datetime.fromtimestamp(mod_time).strftime('%Y-%m-%d %H:%M')
             
             c1, c2, c3 = st.columns([3, 2, 3], vertical_alignment='center')
-            c1.write(filename)
+            c1.write(f"📄 {filename}")
             c2.write(date_str)
             
             with c3:
                 sc1, sc2, sc3 = st.columns(3)
                 if sc1.button("👁️", key=f"view_{filename}", help="View Image"):
                     preview(file_path)
-                if sc2.button("📋", key=f"data_{filename}", help="View Data"):
+                # The Data button now opens the dialog with the Wallet Integration
+                if sc2.button("📊", key=f"data_{filename}", help="View Data & Wallet"):
                     invoice_attributes(filename)
                 if sc3.button("🗑️", key=f"del_{filename}", help="Delete"):
                     delete_invoice(file_path, filename)
+            st.markdown("---")
     else:
         st.info("No receipts found. Go to Dashboard to upload one!")
 

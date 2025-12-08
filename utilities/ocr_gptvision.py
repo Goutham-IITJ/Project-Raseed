@@ -14,12 +14,13 @@ import traceback
 load_dotenv()
 
 # Configure Gemini
+# Using the stable model from your available list
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
 def ocr_gpt(file_path):
-    # Retry configuration: Try 3 times, waiting 30 seconds between tries
+    # Retry configuration
     max_retries = 3
-    retry_delay = 30
+    retry_delay = 5
 
     for attempt in range(max_retries):
         try:
@@ -42,60 +43,93 @@ def ocr_gpt(file_path):
                 st.error("Failed to load image data")
                 return
 
-            # 2. Call Gemini 2.5 Flash (Confirmed available in your list)
+            # 2. Call Gemini
+            # Use 'gemini-1.5-flash' or 'gemini-flash-latest' for stability
             model = genai.GenerativeModel('gemini-2.5-flash')
             
             prompt = """
-            You are an expert receipt scanner for Project Raseed. 
-            Extract the following key invoice attributes from the image.
+            You are an expert financial analyst for Project Raseed. 
+            Extract data from this receipt.
             
-            Format your output strictly as a JSON object. Do not include Markdown formatting.
+            Format output strictly as a JSON object. No Markdown.
             
             Keys required:
             invoice_number, invoice_date (YYYY-MM-DD), due_date (YYYY-MM-DD), 
             seller_information, buyer_information, purchase_order_number, 
-            products_services (comma separated string), 
-            quantities (comma separated integers), 
-            unit_prices (comma separated numerics), 
+            
+            # ITEMS SECTION (CRITICAL)
+            products_services (Return as a JSON LIST of strings), 
+            quantities (Return as a JSON LIST of numbers), 
+            unit_prices (Return as a JSON LIST of numbers), 
+            
+            # TOTALS
             subtotal, service_charges, net_total, discount, tax, tax_rate, 
             shipping_costs, grand_total, currency, payment_terms, payment_method, 
-            bank_information, invoice_notes, shipping_address, billing_address.
+            bank_information, invoice_notes, shipping_address, billing_address,
+            
+            # CATEGORY
+            category (Classify as one of: Groceries, Dining, Transport, Shopping, Utilities, Entertainment, Health, Other)
 
-            If a value is not found, use null or "NULL". 
-            Convert percentages to decimals (20% -> 0.2).
+            If a value is not found, use null. 
             """
 
             response = model.generate_content([prompt, image_parts[0]])
             
             # 3. Clean and Parse Response
+            # Handle cases where Gemini wraps JSON in markdown code blocks
             clean_text = response.text.replace("```json", "").replace("```", "").strip()
-            invoice_dict = json.loads(clean_text)
+            
+            try:
+                invoice_dict = json.loads(clean_text)
+            except json.JSONDecodeError:
+                # Fallback: Try to find the first { and last }
+                start = clean_text.find('{')
+                end = clean_text.rfind('}') + 1
+                if start != -1 and end != -1:
+                    invoice_dict = json.loads(clean_text[start:end])
+                else:
+                    st.error("Failed to parse AI response. Try again.")
+                    return
 
-            # 4. Format Data for Database
-            def clean_split(val, dtype=str):
-                if not val or val == "NULL": return []
-                return [dtype(x.strip()) for x in str(val).split(',')]
+            # 4. Robust Data Normalization
+            def normalize_to_list(val, dtype=str):
+                """Handles both JSON Arrays (Lists) and Comma-Separated Strings safely."""
+                if val is None: return []
+                
+                # If it's already a list (e.g. ["Apple", "Banana"]), just cast types
+                if isinstance(val, list):
+                    return [dtype(x) for x in val if x is not None]
+                
+                # If it's a string (e.g. "Apple, Banana"), split it
+                if isinstance(val, str):
+                    if val.strip() == "" or val.lower() == "null": return []
+                    # Remove accidental brackets like "['A', 'B']"
+                    clean_val = val.replace('[', '').replace(']', '').replace("'", "").replace('"', "")
+                    return [dtype(x.strip()) for x in clean_val.split(',') if x.strip()]
+                
+                return []
 
-            items = clean_split(invoice_dict.get('products_services'), str)
-            quantities = clean_split(invoice_dict.get('quantities'), str) 
-            prices = clean_split(invoice_dict.get('unit_prices'), str)
+            items = normalize_to_list(invoice_dict.get('products_services'), str)
+            quantities = normalize_to_list(invoice_dict.get('quantities'), int) 
+            prices = normalize_to_list(invoice_dict.get('unit_prices'), float)
+
+            # Ensure lists are same length to avoid zip errors
+            # Pad with 1 (qty) or 0 (price) if missing
+            max_len = len(items)
+            while len(quantities) < max_len: quantities.append(1)
+            while len(prices) < max_len: prices.append(0.0)
 
             # 5. Insert into DB
             user_email = st.session_state.get('user_info', {}).get('email', 'test_user@localhost')
             insert_invoice_and_items(invoice_dict, file_path, items, quantities, prices, user_email) 
             
-            st.success("Receipt processed successfully!")
+            st.success(f"Receipt processed! Category: {invoice_dict.get('category', 'Unknown')}")
             return 
 
         except exceptions.ResourceExhausted:
-            # QUOTA ERROR HANDLER
-            if attempt < max_retries - 1:
-                st.warning(f"Gemini 2.5 rate limit hit. Cooling down for {retry_delay}s... (Attempt {attempt+1}/{max_retries})")
-                time.sleep(retry_delay)
-                continue 
-            else:
-                st.error("Quota exceeded. Please try again in a few minutes.")
-                return
+            st.warning(f"Rate limit hit. Retrying in {retry_delay}s... ({attempt+1}/{max_retries})")
+            time.sleep(retry_delay)
+            continue 
 
         except Exception as e:
             st.error(f"Error in Raseed Intelligence Engine: {e}")

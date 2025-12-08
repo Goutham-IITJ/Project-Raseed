@@ -3,7 +3,7 @@ import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
 import datetime
-import os  # <--- Added this to fix the Windows path error
+import os
 
 load_dotenv()
 
@@ -41,11 +41,13 @@ def create_user_tables(user_email):
     sanitized_email = sanitize_email(user_email)
     conn = create_connection()
     c = conn.cursor()
-    # Create Invoice Table
+    
+    # --- UPDATED: Added 'category' column ---
     c.execute(f'''
             CREATE TABLE IF NOT EXISTS invoices_{sanitized_email} (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 invoice_file_name TEXT,
+                category TEXT,
                 invoice_number TEXT,
                 invoice_date DATE,
                 due_date DATE,
@@ -69,7 +71,8 @@ def create_user_tables(user_email):
                 billing_address TEXT
             )
         ''')
-    # Create Line Items Table
+    
+    # Create Line Items Table (Unchanged)
     c.execute(f'''
             CREATE TABLE IF NOT EXISTS line_items_{sanitized_email} (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -85,16 +88,21 @@ def create_user_tables(user_email):
     conn.close()
 
 def insert_invoice_and_items(invoice_dict, file_path, items, quantities, prices, user_email):
+    # --- FIX START: Ensure tables exist before inserting ---
+    create_user_tables(user_email)
+    # --- FIX END ---
+
     conn = create_connection()
     c = conn.cursor()
     sanitized_email = sanitize_email(user_email)
 
-    # --- THE FIX: Use os.path.basename instead of split('/') ---
-    # This safely gets "receipt.jpg" from "C:\Users\Name\receipt.jpg"
+    # Safely get the filename
     file_name = os.path.basename(file_path)
 
+    # --- UPDATED: Included 'category' in data tuple ---
     invoice_data = (
         file_name,
+        validate_text(invoice_dict.get('category')),  
         validate_text(invoice_dict.get('invoice_number')),
         validate_date(invoice_dict.get('invoice_date')),
         validate_date(invoice_dict.get('due_date')),
@@ -118,13 +126,14 @@ def insert_invoice_and_items(invoice_dict, file_path, items, quantities, prices,
         validate_text(invoice_dict.get('billing_address'))
     )
 
+    # SQL Query
     c.execute(f'''
     INSERT INTO invoices_{sanitized_email} (
-        invoice_file_name, invoice_number, invoice_date, due_date, seller_information, buyer_information,
+        invoice_file_name, category, invoice_number, invoice_date, due_date, seller_information, buyer_information,
         purchase_order_number, subtotal, service_charges, net_total, discount, tax,
         tax_rate, shipping_costs, grand_total, currency, payment_terms, payment_method,
         bank_information, invoice_notes, shipping_address, billing_address
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', invoice_data)
 
     invoice_id = c.lastrowid
@@ -132,7 +141,7 @@ def insert_invoice_and_items(invoice_dict, file_path, items, quantities, prices,
     # Insert Line Items
     for item, quantity, price in zip(items, quantities, prices):
         line_item_data = (
-            file_name, # Use the safe filename here too
+            file_name, 
             invoice_id,
             validate_text(item),
             validate_integer(quantity),
@@ -149,19 +158,20 @@ def insert_invoice_and_items(invoice_dict, file_path, items, quantities, prices,
     st.cache_resource.clear()
     conn.close()
 
-# Keep the rest of the file (query_db, delete_data, etc.) as is, or simpler:
-# If you overwrite the whole file with this block, ensure you include query_db, delete_data, check_empty_db at the bottom.
-# To be safe, I have included the query functions below so you can copy-paste the WHOLE file.
-
 @st.cache_data
 def query_db(filename, user_email):
     conn = create_connection()
     c = conn.cursor()
     sanitized_email = sanitize_email(user_email)
+    
+    # Fetch Invoice Data
     c.execute(f"SELECT * FROM invoices_{sanitized_email} WHERE invoice_file_name = ?", (filename,))
     invoice_data = c.fetchone()
+    
+    # Fetch Line Items
     c.execute(f"SELECT * FROM line_items_{sanitized_email} WHERE invoice_file_name = ?", (filename,))
     line_items_data = c.fetchall()
+    
     conn.close()
     return invoice_data, line_items_data
 
@@ -169,8 +179,10 @@ def delete_data(name, user_email):
     conn = create_connection()
     c = conn.cursor()
     sanitized_email = sanitize_email(user_email)
+    
     c.execute(f"DELETE FROM line_items_{sanitized_email} WHERE invoice_file_name = ?", (name,))
     c.execute(f"DELETE FROM invoices_{sanitized_email} WHERE invoice_file_name = ?", (name,))
+    
     conn.commit()
     st.cache_data.clear()
     st.cache_resource.clear()
@@ -181,10 +193,31 @@ def get_row_items(user_email):
     conn = create_connection()
     c = conn.cursor()
     sanitized_email = sanitize_email(user_email)
-    c.execute(f"SELECT * FROM invoices_{sanitized_email}")
-    df1 = pd.DataFrame(c.fetchall(), columns=[column[0] for column in c.description])
-    c.execute(f"SELECT * FROM line_items_{sanitized_email}")
-    df2 = pd.DataFrame(c.fetchall(), columns=[column[0] for column in c.description])
+    
+    # Fetch Invoices DataFrame
+    try:
+        c.execute(f"SELECT * FROM invoices_{sanitized_email}")
+        data = c.fetchall()
+        if data:
+            columns = [column[0] for column in c.description]
+            df1 = pd.DataFrame(data, columns=columns)
+        else:
+            df1 = pd.DataFrame()
+    except:
+        df1 = pd.DataFrame()
+
+    # Fetch Line Items DataFrame
+    try:
+        c.execute(f"SELECT * FROM line_items_{sanitized_email}")
+        data = c.fetchall()
+        if data:
+            columns = [column[0] for column in c.description]
+            df2 = pd.DataFrame(data, columns=columns)
+        else:
+            df2 = pd.DataFrame()
+    except:
+        df2 = pd.DataFrame()
+        
     conn.close()
     return df1, df2
 
@@ -200,3 +233,12 @@ def check_empty_db(user_email):
         count = 0
     conn.close()
     return count == 0
+
+def delete_user_tables(user_email):
+    conn = create_connection()
+    c = conn.cursor()
+    sanitized_email = sanitize_email(user_email)
+    c.execute(f"DROP TABLE IF EXISTS invoices_{sanitized_email}")
+    c.execute(f"DROP TABLE IF EXISTS line_items_{sanitized_email}")
+    conn.commit()
+    conn.close()
