@@ -50,7 +50,35 @@
 
 ## 📂 Project Structure
 
-Project-Raseed/ ├── main.py # Entry point & Navigation ├── requirements.txt # Python Dependencies ├── images/ # Assets (Logos, Icons) ├── uploaded_invoices/ # Local storage for receipts ├── utilities/ │ ├── ocr_gptvision.py # Gemini Vision Extractor │ ├── wallet_helper.py # Google Wallet JWT Engine │ └── home.py # Home Page UI ├── database_files/ │ └── sqlite_db.py # Database Manager (CRUD) └── navigation_pages/ ├── ai_chat.py # Raseed Agent (Chatbot) ├── invoice_history.py # Analytics & Wallet Actions └── ...
+```text
+Project-Raseed/
+├── .streamlit/
+│   └── config.toml           # Theme & Server Configuration
+├── database_files/
+│   └── sqlite_db.py          # SQLite Database Manager (CRUD operations)
+├── images/                   # App assets (Logos, Icons)
+├── navigation_pages/
+│   ├── about_us.py           # Project & Team Info
+│   ├── ai_chat.py            # Raseed AI Agent (Chat Interface)
+│   ├── contact_us.py         # Contact Form
+│   ├── invoice_history.py    # Analytics Dashboard & Wallet Integration
+│   ├── manual_entry.py       # Manual Receipt Entry Form
+│   ├── my_database.py        # Raw Database Viewer
+│   └── settings.py           # Account Settings
+├── uploaded_invoices/        # Local storage for receipt images
+├── utilities/
+│   ├── authentication.py     # Auth Utilities
+│   ├── home.py               # Home Page UI (Ingestion Card)
+│   ├── ocr_gptvision.py      # Gemini Vision Engine (OCR & Categorization)
+│   ├── send_email.py         # Email Service
+│   └── wallet_helper.py      # Google Wallet JWT Signing Engine
+├── .env                      # API Keys (Google Cloud)
+├── .gitignore                # Git Ignore Rules
+├── LICENSE                   # MIT License
+├── main.py                   # Application Entry Point & Navigation Logic
+├── README.md                 # Project Documentation
+├── requirements.txt          # Python Dependencies
+└── wallet_key.json           # Google Service Account Credentials (DO NOT COMMIT)
 
 ## 👨‍💻 Developer
 
