@@ -2,6 +2,8 @@
 
 **Project Raseed** is a next-generation financial assistant designed to bridge the gap between physical receipts and digital financial health. Built for the **Google Cloud Agentic AI Day**, it uses **Gemini 2.5 Flash** to autonomously ingest, categorize, and reason about your spending, while integrating directly with **Google Wallet**.
 
+**Live link** : https://project-raseed.streamlit.app/ 
+
 ## 🚀 Key Features
 
 - **📷 Visual Ingestion (Gemini Vision):** Instantly extracts merchant details, line items, taxes, and **spending categories** (e.g., Dining, Groceries) from receipt images.
@@ -79,12 +81,12 @@ Project-Raseed/
 ├── README.md                 # Project Documentation
 ├── requirements.txt          # Python Dependencies
 └── wallet_key.json           # Google Service Account Credentials (DO NOT COMMIT)
-
+```
 ## 👨‍💻 Developer
 
 **Goutham A.S**
 
-- _Sole Developer & Architect_
+- Developer & Architect_
 - Focus: Agentic AI, Full Stack Python, Cloud Integration
 
 ## 📄 License
