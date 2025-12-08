@@ -1,15 +1,16 @@
 import streamlit as st
-from database_files.sqlite_db import query_db, delete_data
+from database_files.sqlite_db import query_db, delete_data, create_connection, sanitize_email
 import os
 import pandas as pd
 import datetime
+import plotly.express as px
 from utilities.wallet_helper import create_jwt_link, create_class_if_not_exists
 
 # --- LOCAL CONFIGURATION ---
 UPLOAD_DIR = "uploaded_invoices"
 supported_extensions = ('.jpg', '.jpeg', '.png', '.pdf')
 
-st.header("Recent Receipts")
+st.header("Spending Dashboard")
 
 # Helper to get user folder
 user_email = st.session_state['user_info'].get('email')
@@ -19,14 +20,64 @@ if not os.path.exists(user_folder):
     os.makedirs(user_folder)
 
 # --- WALLET SETUP ---
-# We try to ensure the Wallet Class exists when the page loads
+# Ensure the Wallet Class exists when the page loads
 if "wallet_class_checked" not in st.session_state:
     try:
         create_class_if_not_exists()
         st.session_state["wallet_class_checked"] = True
     except Exception as e:
-        # Don't crash the app if wallet creds are missing/wrong
+        # Don't crash if wallet creds are missing (just print warning)
         print(f"Wallet Init Warning: {e}")
+
+# --- ANALYTICS SECTION ---
+try:
+    conn = create_connection()
+    sanitized_email = sanitize_email(user_email)
+    
+    # Fetch spending by category from DB
+    df_chart = pd.read_sql_query(
+        f"SELECT category, SUM(grand_total) as total FROM invoices_{sanitized_email} GROUP BY category", 
+        conn
+    )
+    conn.close()
+
+    if not df_chart.empty:
+        col_chart1, col_chart2 = st.columns([2, 1])
+        
+        with col_chart1:
+            # Interactive Donut Chart
+            fig = px.pie(
+                df_chart, 
+                values='total', 
+                names='category', 
+                title='Spending by Category',
+                hole=0.4,
+                color_discrete_sequence=px.colors.qualitative.G10 
+            )
+            fig.update_layout(height=350, margin=dict(t=40, b=0, l=0, r=0))
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with col_chart2:
+            # Key Metrics
+            total_spend = df_chart['total'].sum()
+            # Find top category safely
+            if not df_chart.empty:
+                top_cat_row = df_chart.loc[df_chart['total'].idxmax()]
+                top_cat = top_cat_row['category']
+            else:
+                top_cat = "N/A"
+                
+            st.metric("Total Spent", f"${total_spend:,.2f}")
+            st.metric("Top Category", top_cat)
+            
+except Exception as e:
+    # Fail silently if DB is empty or table doesn't exist yet
+    pass
+
+st.divider()
+st.subheader("Recent Receipts")
+
+# --- DIALOGS ---
 
 @st.dialog(title="Receipt Preview", width="large")
 def preview(file_path):
@@ -46,7 +97,7 @@ def invoice_attributes(filename):
     if invoice_data:
         st.subheader("Receipt Details")
         
-        # Updated Columns to match new DB Schema (including Category)
+        # Updated Columns to match DB Schema (including Category)
         invoice_columns = [
             'ID', 'File Name', 'Category', 'Invoice #', 'Date', 'Due Date', 'Seller',
             'Buyer', 'PO #', 'Subtotal', 'Service Charge', 'Net',
@@ -54,7 +105,7 @@ def invoice_attributes(filename):
             'Method', 'Bank', 'Notes', 'Ship Addr', 'Bill Addr'
         ]
         
-        # Create DataFrame
+        # Create DataFrame safely
         if len(invoice_data) == len(invoice_columns):
              df = pd.DataFrame([invoice_data], columns=invoice_columns)
         else:
@@ -76,7 +127,7 @@ def invoice_attributes(filename):
                     with st.spinner("Minting Pass..."):
                         wallet_link = create_jwt_link(invoice_data, line_items_data)
                         
-                        # Show the official "Add to Google Wallet" style
+                        # Show the official "Add to Google Wallet" button
                         st.success("Pass Ready!")
                         st.link_button("Add to Google Wallet", wallet_link, type="primary")
                         st.caption("Click to save this receipt to your phone.")
@@ -104,8 +155,11 @@ def delete_invoice(file_path, name):
 
 # --- LIST LOCAL FILES ---
 try:
-    files = os.listdir(user_folder)
-    files = [f for f in files if f.lower().endswith(supported_extensions)]
+    if os.path.exists(user_folder):
+        files = os.listdir(user_folder)
+        files = [f for f in files if f.lower().endswith(supported_extensions)]
+    else:
+        files = []
     
     if files:
         # Table Header
@@ -135,7 +189,7 @@ try:
                     delete_invoice(file_path, filename)
             st.markdown("---")
     else:
-        st.info("No receipts found. Go to Dashboard to upload one!")
+        st.info("No receipts found. Go to Home to upload one!")
 
 except Exception as e:
     st.error(f"Error reading local folder: {e}")
