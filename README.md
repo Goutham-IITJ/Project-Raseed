@@ -1,141 +1,64 @@
-# InvoiceGPT
+# Project Raseed 🧾✨
 
-InvoiceGPT is an intelligent invoice processing solution that leverages GPT-4 Vision for advanced OCR capabilities, allowing automated extraction and interpretation of invoice data. Built with Streamlit, it offers a user-friendly interface for managing financial documents with AI-powered insights.
+**Project Raseed** is a next-generation financial assistant designed to bridge the gap between physical receipts and digital financial health. Built for the **Google Cloud Agentic AI Day**, it uses **Gemini 2.5 Flash** to autonomously ingest, categorize, and reason about your spending, while integrating directly with **Google Wallet**.
 
-Demo: https://drive.google.com/file/d/1oKnuBq1nZCBG2GCzcHnTvdvG0WCqSMJw/view?usp=sharing
-## Features
+## 🚀 Key Features
 
-- **Advanced OCR Processing**: Utilizes GPT-4 Vision to accurately extract data from any invoice format
-- **Secure Storage**: Automated storage of processed data in Amazon S3 and AWS RDS (MySQL)
-- **Data Security**: Implements Google Authentication and robust data isolation
-- **Natural Language Querying**: AI-powered chatbot interface using LangChain and GPT-4
-- **Smart Auto-Splitting**: Intelligent categorization of invoice items across PDF and image formats
-- **Analytics Dashboard**: Advanced tools for financial data analysis and insights
+- **📷 Visual Ingestion (Gemini Vision):** Instantly extracts merchant details, line items, taxes, and **spending categories** (e.g., Dining, Groceries) from receipt images.
+- **💳 Google Wallet Integration:** "Mint" your physical receipts into dynamic **Google Wallet Passes** with a single click. Uses signed JWTs for secure pass creation.
+- **🧠 Agentic AI Assistant:** A LangChain SQL Agent (powered by Gemini) that you can chat with. Ask questions like _"How much did I spend on coffee?"_ or _"Do I have any shampoo left?"_.
+- **📊 Smart Analytics:** Interactive dashboard showing spending breakdowns by category using Plotly charts.
+- **💾 Local & Secure:** Uses a robust local SQLite database with self-healing schema architecture.
 
-## Technology Stack
+## 🛠️ Technology Stack
 
-- Frontend: Streamlit
-- AI/ML: GPT-4 Vision, GPT-4o-mini, LangChain
-- Storage: Amazon S3, AWS RDS (MySQL)
-- Authentication: Google Auth
-- OCR: GPT-4 Vision
+- **AI Model:** Google Gemini 1.5 Flash (via `google-generativeai`)
+- **Frontend:** Streamlit (Python)
+- **Orchestration:** LangChain (SQL Database Toolkit)
+- **Database:** SQLite (Simulating Firebase Firestore)
+- **Mobile Wallet:** Google Wallet API (REST & JWT)
+- **Visualization:** Plotly Express
 
-## Installation
+## ⚙️ Installation & Setup
 
-1. Clone the repository:
-```bash
-git clone https://github.com/yourusername/invoicegpt.git
-cd invoicegpt
-```
+1.  **Clone the repository:**
 
-2. Install required dependencies:
-```bash
-pip install -r requirements.txt
-```
+    ```bash
+    git clone [https://github.com/Goutham-IITJ/Project-Raseed.git](https://github.com/Goutham-IITJ/Project-Raseed.git)
+    cd Project-Raseed
+    ```
 
-3. Set up Google OAuth 2.0:
+2.  **Install dependencies:**
 
-* Go to the Google Cloud Console
-* Create a new project or select an existing one
-* Enable the Google OAuth2 API
-* Go to Credentials > Create Credentials > OAuth Client ID
-* Configure the OAuth consent screen
-* Create OAuth 2.0 Client ID (Web application type)
-* Download the client configuration JSON file
-* Rename it to google_creds.json and place it in the root directory
+    ```bash
+    pip install -r requirements.txt
+    ```
 
-3. Set up environment variables:
-```bash
-# Create a .env file with the following variables
-AWS_ACCESS_KEY_ID=your_access_key
-AWS_SECRET_ACCESS_KEY=your_secret_key
-OPENAI_API_KEY=your_openai_api_key
-GOOGLE_CLIENT_ID=your_google_client_id
-GOOGLE_CLIENT_SECRET=your_google_client_secret
-```
+3.  **Set up Credentials:**
 
-## Usage
+    - Create a `.env` file in the root directory.
+    - Add your Google Cloud API Key:
+      ```
+      GOOGLE_API_KEY=your_gemini_api_key_here
+      ```
+    - **For Wallet Features:** Place your Service Account JSON key in the root folder and name it `wallet_key.json`.
 
-1. Start the application:
-```bash
-streamlit run main.py
-```
+4.  **Run the App:**
+    ```bash
+    streamlit run main.py
+    ```
 
-2. Access the application through your web browser at `http://localhost:8501`
+## 📂 Project Structure
 
-3. Log in using your Google account
+Project-Raseed/ ├── main.py # Entry point & Navigation ├── requirements.txt # Python Dependencies ├── images/ # Assets (Logos, Icons) ├── uploaded_invoices/ # Local storage for receipts ├── utilities/ │ ├── ocr_gptvision.py # Gemini Vision Extractor │ ├── wallet_helper.py # Google Wallet JWT Engine │ └── home.py # Home Page UI ├── database_files/ │ └── sqlite_db.py # Database Manager (CRUD) └── navigation_pages/ ├── ai_chat.py # Raseed Agent (Chatbot) ├── invoice_history.py # Analytics & Wallet Actions └── ...
 
-4. Upload invoices through the user interface
+## 👨‍💻 Developer
 
-5. Use the chatbot interface to query your invoice data using natural language
+**Goutham A.S**
 
-## Project Structure
+- _Sole Developer & Architect_
+- Focus: Agentic AI, Full Stack Python, Cloud Integration
 
-```
-invoicegpt/
-├── .streamlit/           # Streamlit configuration files
-├── database_files/       # Database related files and schemas
-├── images/              # Application icons and images
-├── navigation_pages/    # Streamlit page navigation files
-├── utilities/           # Utility functions and helpers
-├── .gitignore          # Git ignore configuration
-├── README.md           # Project documentation
-├── requirements.txt    # Python dependencies
-└── main.py             # Main application entry point
-```
+## 📄 License
 
-## Key Features Explained
-
-### Store Invoices
-- Centralized document storage
-- Secure cloud backup
-- Easy access and organization
-
-### Smart Processing
-- Advanced OCR technology
-- Automated data extraction
-- Intelligent interpretation
-
-### Auto-Splitting
-- Automatic item categorization
-- Support for multiple formats
-- Precise allocation of items
-
-### User-Friendly Interface
-- Intuitive design
-- Accessible to all skill levels
-- Streamlined workflow
-
-### AI Querying
-- Natural language processing
-- Instant response generation
-- Detailed financial insights
-
-### Data Insights
-- Advanced analytics tools
-- Custom reporting
-- Business intelligence features
-
-## Security
-
-InvoiceGPT prioritizes data security through:
-- Secure Google Authentication
-- Data isolation
-- AWS S3 encrypted storage
-- Secure database connections
-
-## Contributing
-
-1. Fork the repository
-2. Create a new branch (`git checkout -b feature/improvement`)
-3. Commit your changes (`git commit -am 'Add new feature'`)
-4. Push to the branch (`git push origin feature/improvement`)
-5. Create a Pull Request
-
-## License
-
-This project is licensed under the [MIT License](https://github.com/YohanV1/InvoiceGPT/blob/main/LICENSE)
-
-## Support
-
-For support, please open an issue in the GitHub repository.
+This project is licensed under the MIT License.
