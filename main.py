@@ -6,14 +6,14 @@ from utilities.home import home_page
 st.set_page_config(layout="wide", page_title='Project Raseed', page_icon='💳')
 
 # --- SMART LOGO FINDER ---
-# We find the path BEFORE anything else to ensure we have a valid logo
 logo_path = None
+# Check exact filenames. Add your specific filename here if different.
 possible_paths = [
-    "images/raseedlogo.png",       # Your new logo
-    "images/Raseed_Logo.png",       # Case sensitive check
-    "images/invoicegpt_logo.png",   # Fallback 1 (I know this exists from your uploads)
-    "images/invoicegpt_logo_full.png", # Fallback 2
-    "images/invoicegpt_icon.png"    # Fallback 3
+    "images/raseedlogo.png",       
+    "images/Raseed_Logo.png",       
+    "images/logo.png",
+    "images/invoicegpt_logo.png",
+    "images/invoicegpt_logo_full.png"
 ]
 
 for path in possible_paths:
@@ -33,16 +33,22 @@ st.markdown("""
             background-color: #F8F9FA;
         }
 
-        /* --- LOGO SIZE HACK --- */
-        /* This forces st.logo to be larger than the default small icon size */
+        /* --- AGGRESSIVE LOGO SIZING --- */
+        /* Forces the container to expand */
+        [data-testid="stSidebarHeader"] {
+            padding-bottom: 0px !important;
+        }
         [data-testid="stLogo"] {
             height: auto !important;
+            width: auto !important;
             max-width: 100% !important;
-            width: 180px !important; /* Adjust this to make it bigger/smaller */
         }
+        /* Forces the image itself to be big */
         [data-testid="stLogo"] img {
             height: auto !important;
-            max-width: 100% !important;
+            width: 220px !important; /* Adjust this px value to control size */
+            max-width: 90% !important;
+            margin-bottom: 10px;
         }
 
         /* Button Styling */
@@ -64,14 +70,12 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- SET LOGO AT TOP ---
+# --- SET LOGO ---
 if logo_path:
-    # We use st.logo because it guarantees TOP position. 
-    # The CSS above fixes the size issue.
     st.logo(logo_path, icon_image=None)
 else:
-    # Fallback if no images found at all
-    st.sidebar.markdown("### 💳 Project Raseed")
+    # If no logo found, show text (Debug check)
+    st.sidebar.warning("Logo file not found in 'images/' folder.")
 
 # --- LOGIN BYPASS ---
 if 'connected' not in st.session_state:
