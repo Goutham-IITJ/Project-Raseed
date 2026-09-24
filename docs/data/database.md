@@ -1,0 +1,42 @@
+# Raseed V2 Database Architecture
+
+Primary database: PostgreSQL.
+
+## Tables
+
+users, user_preferences, receipts, extraction_runs, merchants, purchases, payments, line_items, products, categories, inventory_items, inventory_lots, inventory_events, insights, conversations, messages, tool_executions, memories, wallet_passes, market_price_observations, outbox_events.
+
+## Principles
+
+- use UUIDs for application identifiers
+- use exact numeric/decimal types for money
+- use foreign keys and unique constraints aggressively
+- use SQLAlchemy and Alembic migrations, not ad-hoc CREATE TABLE IF NOT EXISTS scripts
+- use JSONB for bounded, genuinely variable metadata, not as a substitute for the relational model
+- keep receipt binaries in object storage
+- index common access paths by user_id and timestamps
+- add uniqueness where idempotency requires it
+
+## Transaction boundary
+
+Canonical database state and its corresponding outbox event must be written in
+the same PostgreSQL transaction. This includes canonical purchase creation.
+Publishing happens after commit; never commit state and its corresponding event
+separately. Milestone 1 has no defined domain events and does not add an outbox
+table or dispatcher ahead of the later event-producing workflows.
+
+Inventory state is changed through inventory events and service logic.
+
+## Ownership
+
+All user-owned rows are filtered/authorized by the authenticated server-side user context.
+
+## Milestone 1 schema
+
+Only `users` and `user_preferences` are introduced. Users have an internal UUID,
+unique nonempty Firebase uid, nullable email/display name, currency/timezone/locale,
+and timezone-aware creation/update timestamps. Email is not an identity key.
+Preferences have a UUID, non-null user foreign key with cascade deletion, a
+constrained key (currency/timezone/locale), a non-null string value, timestamps,
+and uniqueness on `(user_id, key)`. Defaults and projection semantics are defined
+in the domain model and ADR-004. No legacy database is imported or modified.
