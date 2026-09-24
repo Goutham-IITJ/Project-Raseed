@@ -4,3 +4,26 @@ venv
 google_creds.json
 invoicegpt_db.db
 wallet_key.json
+
+# Raseed V2 generated files and local credentials
+.venv/
+.cache/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+.env.*
+!.env.example
+!**/.env.example
+**/node_modules/
+**/.next/
+**/coverage/
+*.tsbuildinfo
+*.log
+*service-account*.json
+*firebase-adminsdk*.json
