@@ -12,11 +12,13 @@ from starlette.exceptions import HTTPException
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
+from backend.app.api.purchases import router as purchase_router
 from backend.app.api.routes import router
 from backend.app.config import Settings
 from backend.app.database import make_engine, make_session_factory
 from backend.app.identity.context import TokenVerifier
 from backend.app.identity.firebase import FirebaseTokenVerifier
+from backend.app.purchases.errors import DomainError
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +60,7 @@ def create_app(
     application.add_middleware(
         CORSMiddleware,
         allow_origins=config.cors_origins,
-        allow_methods=["GET", "PATCH"],
+        allow_methods=["GET", "PATCH", "POST"],
         allow_headers=["Authorization", "Content-Type"],
     )
 
@@ -91,6 +93,10 @@ def create_app(
         logger.error("Database operation failed (%s)", type(exc).__name__)
         return error_response("database_unavailable", "Database is temporarily unavailable.", 503)
 
+    @application.exception_handler(DomainError)
+    async def domain_error(request: Request, exc: DomainError) -> JSONResponse:
+        return error_response(exc.code, exc.message, exc.status_code)
+
     @application.exception_handler(Exception)
     async def unexpected_error(request: Request, exc: Exception) -> JSONResponse:
         logger.error("Request failed (%s)", type(exc).__name__)
@@ -101,6 +107,7 @@ def create_app(
         return {"status": "ok"}
 
     application.include_router(router)
+    application.include_router(purchase_router)
     return application
 
 

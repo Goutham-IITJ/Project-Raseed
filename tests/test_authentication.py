@@ -38,6 +38,22 @@ def test_health_is_only_liveness(unauthenticated_client):
     assert unauthenticated_client.get("/health").json() == {"status": "ok"}
 
 
+@pytest.mark.parametrize(
+    "method,path",
+    [
+        ("POST", "/api/v1/receipts"),
+        ("GET", "/api/v1/receipts"),
+        ("GET", "/api/v1/receipts/b9f9d254-dcef-427b-8efb-4ba36eb324ec"),
+        ("GET", "/api/v1/purchases"),
+        ("GET", "/api/v1/purchases/b9f9d254-dcef-427b-8efb-4ba36eb324ec"),
+    ],
+)
+def test_canonical_endpoints_require_authentication(unauthenticated_client, method, path):
+    response = unauthenticated_client.request(method, path)
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "unauthorized"
+
+
 def test_firebase_adapter_delegates_real_verification(monkeypatch):
     verifier = FirebaseTokenVerifier("project-id")
     application = object()

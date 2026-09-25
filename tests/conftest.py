@@ -63,7 +63,12 @@ def migrated_engine(database_url: str) -> Iterator[Engine]:
 @pytest.fixture
 def database(migrated_engine: Engine) -> Iterator[Engine]:
     with migrated_engine.begin() as connection:
-        connection.execute(text("TRUNCATE user_preferences, users"))
+        connection.execute(
+            text(
+                "TRUNCATE outbox_events, payments, line_items, purchases, extraction_runs, "
+                "receipts, products, categories, merchants, user_preferences, users"
+            )
+        )
     yield migrated_engine
 
 

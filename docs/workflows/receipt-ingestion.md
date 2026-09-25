@@ -32,7 +32,12 @@ adds inventory processing. This end-to-end workflow is not a Milestone 1 deliver
 
 ## Receipt processing states
 
-UPLOADED → PROCESSING → EXTRACTED → VALIDATING → NORMALIZED → PROCESSED
+PENDING_UPLOAD → UPLOADED → PROCESSING → EXTRACTED → VALIDATING → NORMALIZED → PROCESSED
+
+Milestone 2 creates metadata in PENDING_UPLOAD only. It neither uploads a file nor
+emits RECEIPT_UPLOADED; actual artifact verification and processing start in
+Milestone 3. Canonical purchase services already commit PURCHASE_CREATED to the
+outbox, without dispatching it.
 
 Failure or unresolved ambiguity can lead to NEEDS_REVIEW or FAILED.
 

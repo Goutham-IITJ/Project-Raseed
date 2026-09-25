@@ -16,7 +16,7 @@ This directory is the authoritative product and architecture specification for R
 - Core workflows: v1.0
 - System architecture: v1.0 draft
 - Database architecture: v1.0 draft
-- API contract: [v1 identity endpoints](api/api-contract.md)
+- API contract: [v1 identity and canonical purchase endpoints](api/api-contract.md)
 - AI/worker architecture: v1.0 draft
 - Security architecture: v1.0 draft
 
@@ -25,3 +25,6 @@ This blueprint is intentionally implementation-aware but not yet a final coding 
 Milestones 0–1 use the accepted Firebase/SQLAlchemy decisions in
 [ADR-004](decisions/ADR-004-identity-foundation.md). Local setup is documented in
 [DEVELOPMENT.md](../DEVELOPMENT.md). The Streamlit prototype remains untouched.
+
+Milestone 2 persistence and API clarifications are recorded in
+[ADR-005](decisions/ADR-005-canonical-purchase-foundation.md).

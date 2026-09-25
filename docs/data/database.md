@@ -40,3 +40,12 @@ Preferences have a UUID, non-null user foreign key with cascade deletion, a
 constrained key (currency/timezone/locale), a non-null string value, timestamps,
 and uniqueness on `(user_id, key)`. Defaults and projection semantics are defined
 in the domain model and ADR-004. No legacy database is imported or modified.
+
+## Milestone 2 schema
+
+Revision `0002_purchase_foundation` adds receipts, extraction_runs, merchants,
+categories, products, purchases, line_items, payments, and the required durable
+outbox foundation. See [ADR-005](../decisions/ADR-005-canonical-purchase-foundation.md)
+for exact nullability, NUMERIC(20,6), duplicate rules, ownership foreign keys,
+reference-data scope, and intentional deletion behavior. No catalog taxonomy is
+seeded and no existing identity data is rewritten.

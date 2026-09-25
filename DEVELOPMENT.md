@@ -72,8 +72,7 @@ port in `DATABASE_URL` and `TEST_DATABASE_URL`.
 ## Checks
 
 ```powershell
-$env:TEST_DATABASE_URL = 'postgresql+psycopg://raseed:raseed_local@localhost:5432/raseed_test'
-uv run pytest --cov=backend/app --cov-report=term-missing
+uv run --env-file .env pytest --cov=backend/app --cov-report=term-missing
 uv run ruff check backend tests database
 uv run ruff format --check backend tests database
 uv run mypy backend
@@ -84,8 +83,10 @@ npm.cmd --prefix apps/web test
 npm.cmd --prefix apps/web run build
 ```
 
-For a POSIX shell use `export TEST_DATABASE_URL='...'`. Compose creates the
-separate `raseed_test` database on first volume initialization. Integration tests
+The pytest command loads `TEST_DATABASE_URL` from the local `.env`, including
+any custom PostgreSQL port. Alternatively, export it in your shell or CI.
+Compose creates the separate `raseed_test` database on first volume initialization.
+Integration tests
 truncate its user tables and exercise migration downgrade/upgrade; use only a
 disposable database ending in `_test`. They refuse the application database and
 skip explicitly when `TEST_DATABASE_URL` is missing. To run only credential-free
@@ -105,8 +106,10 @@ Preferences are canonical key/value rows with a synchronized user-profile
 projection. Defaults are INR, Asia/Kolkata, en-IN. Tokens, receipt contents, and
 database parameters are not included in application error responses/logs.
 
-Only identity and preferences are implemented. Receipt/purchase foundations are
-Milestone 2, ingestion/extraction Milestone 3, inventory Milestone 4. Budget
-persistence remains undecided. No outbox events are defined for Milestone 1, and
-the worker is intentionally inactive. Later event-producing services must commit
-canonical state and its corresponding outbox event in one PostgreSQL transaction.
+Identity, preferences, and the Milestone 2 receipt/purchase foundations are
+implemented. Receipt metadata starts in PENDING_UPLOAD; purchases, line items,
+payments, and PURCHASE_CREATED outbox events commit atomically through internal
+services. Catalog and extraction-run persistence are available internally, and
+the API exposes receipt metadata creation and receipt/purchase reads.
+Ingestion/extraction and outbox dispatch remain Milestone 3, inventory Milestone 4.
+Budget persistence remains undecided, and the worker is intentionally inactive.

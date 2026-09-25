@@ -33,6 +33,10 @@ encoding is introduced in Milestone 1.
 - status
 - upload/process timestamps
 
+Metadata-only records start as `PENDING_UPLOAD`; storage URI and upload/process
+timestamps remain null until real ingestion. Content-hash uniqueness is scoped
+to user ownership. See ADR-005 for the Milestone 2 field/constraint decisions.
+
 ### ExtractionRun
 - id
 - receipt_id
@@ -80,6 +84,8 @@ encoding is introduced in Milestone 1.
 
 ### Category
 - hierarchical category tree via parent_id
+
+No fixed taxonomy is currently approved; Milestone 2 seeds no category rows.
 
 ### InventoryItem
 - user-level current aggregate view
