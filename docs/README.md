@@ -28,3 +28,10 @@ Milestones 0–1 use the accepted Firebase/SQLAlchemy decisions in
 
 Milestone 2 persistence and API clarifications are recorded in
 [ADR-005](decisions/ADR-005-canonical-purchase-foundation.md).
+
+Milestone 3 implements private uploads and asynchronous Gemini extraction. The
+actual processing/recovery contract is in [receipt ingestion](workflows/receipt-ingestion.md)
+and [ADR-006](decisions/ADR-006-receipt-ingestion.md). Local workers, deterministic
+checks, and explicit live verification commands are in [DEVELOPMENT.md](../DEVELOPMENT.md).
+The completed checks and changed-file inventory are recorded in the
+[Milestone 3 validation checkpoint](implementation/milestone-3-validation.md).

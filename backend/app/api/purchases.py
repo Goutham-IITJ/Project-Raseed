@@ -1,11 +1,18 @@
-from typing import Annotated
+from typing import Annotated, cast
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request, Response
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from backend.app.api.dependencies import get_current_user, get_session, reject_query_parameters
+from backend.app.config import Settings
 from backend.app.identity.context import CurrentUser
+from backend.app.ingestion.service import UploadService
+from backend.app.ingestion.storage import ObjectStorage
+from backend.app.ingestion.upload import read_upload
+from backend.app.purchases.errors import DomainError
 from backend.app.purchases.schemas import (
     PageQuery,
     PurchaseListResponse,
@@ -31,9 +38,66 @@ NoQuery = Annotated[None, Depends(reject_query_parameters)]
 Pagination = Annotated[PageQuery, Query()]
 
 
-@router.post("/receipts", status_code=201, response_model=ReceiptResponse)
-def create_receipt(body: ReceiptCreate, service: Service, no_query: NoQuery) -> ReceiptResponse:
-    return ReceiptResponse(data=service.create_receipt(body))
+def get_upload_service(
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    session: Annotated[Session, Depends(get_session)],
+) -> UploadService:
+    return UploadService(
+        session,
+        current_user,
+        cast(ObjectStorage, request.app.state.object_storage),
+        cast(Settings, request.app.state.settings),
+    )
+
+
+@router.post(
+    "/receipts",
+    status_code=202,
+    response_model=ReceiptResponse,
+    responses={201: {"model": ReceiptResponse, "description": "Metadata-only JSON request"}},
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {
+                "application/json": {"schema": ReceiptCreate.model_json_schema()},
+                "multipart/form-data": {
+                    "schema": {
+                        "type": "object",
+                        "required": ["file"],
+                        "additionalProperties": False,
+                        "properties": {"file": {"type": "string", "format": "binary"}},
+                    }
+                },
+            },
+        }
+    },
+)
+async def create_receipt(
+    request: Request,
+    response: Response,
+    service: Service,
+    no_query: NoQuery,
+    uploader: Annotated[UploadService, Depends(get_upload_service)],
+) -> ReceiptResponse:
+    content_type = request.headers.get("content-type", "").split(";", 1)[0].lower()
+    if content_type == "application/json":
+        chunks = bytearray()
+        async for chunk in request.stream():
+            chunks.extend(chunk)
+            if len(chunks) > 64 * 1024:
+                raise DomainError
+        try:
+            metadata = ReceiptCreate.model_validate_json(bytes(chunks))
+        except ValidationError as exc:
+            raise DomainError from exc
+        response.status_code = 201
+        return ReceiptResponse(data=await run_in_threadpool(service.create_receipt, metadata))
+    if content_type != "multipart/form-data":
+        raise DomainError
+    settings = cast(Settings, request.app.state.settings)
+    upload = await read_upload(request, settings.max_upload_bytes)
+    return ReceiptResponse(data=await run_in_threadpool(uploader.upload, upload))
 
 
 @router.get("/receipts", response_model=ReceiptListResponse)

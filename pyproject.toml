@@ -8,8 +8,13 @@ dependencies = [
   "babel>=2.16,<3",
   "fastapi>=0.121,<1",
   "firebase-admin>=6.6,<8",
+  "google-cloud-storage>=3,<4",
+  "httpx>=0.28,<1",
+  "pillow>=11,<13",
   "psycopg[binary]>=3.2,<4",
   "pydantic-settings>=2.7,<3",
+  "pypdf>=6,<7",
+  "python-multipart>=0.0.20,<1",
   "sqlalchemy>=2.0,<3",
   "tzdata>=2025.1",
   "uvicorn>=0.34,<1",
@@ -17,7 +22,6 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-  "httpx>=0.28,<1",
   "mypy>=1.15,<2",
   "pytest>=8.3,<10",
   "pytest-cov>=6,<8",
@@ -50,5 +54,5 @@ strict = true
 files = ["backend"]
 
 [[tool.mypy.overrides]]
-module = ["firebase_admin.*", "google.auth.*"]
+module = ["firebase_admin.*", "google.auth.*", "google.cloud.*"]
 ignore_missing_imports = true

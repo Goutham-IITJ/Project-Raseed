@@ -1,6 +1,7 @@
 from pathlib import Path
+from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 
@@ -13,6 +14,18 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://raseed:raseed_local@localhost:5432/raseed"
     firebase_project_id: str = ""
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
+    storage_provider: Literal["local", "gcs"] = "local"
+    local_storage_path: Path = ROOT / ".local" / "receipts"
+    gcs_bucket: str = ""
+    max_upload_bytes: int = Field(default=10 * 1024 * 1024, ge=1, le=20 * 1024 * 1024)
+    max_pdf_pages: int = Field(default=20, ge=1, le=100)
+    gemini_api_key: SecretStr = SecretStr("")
+    gemini_model: str = ""
+    extraction_timeout_seconds: float = Field(default=45, gt=0, le=120)
+    receipt_lease_seconds: int = Field(default=300, ge=300, le=3600)
+    receipt_max_attempts: int = Field(default=3, ge=1, le=10)
+    receipt_retry_seconds: int = Field(default=5, ge=1, le=300)
+    worker_poll_seconds: float = Field(default=2, gt=0, le=60)
 
     @field_validator("database_url")
     @classmethod

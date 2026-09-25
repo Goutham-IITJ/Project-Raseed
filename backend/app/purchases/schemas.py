@@ -276,6 +276,10 @@ class ReceiptView(TimestampView):
     status: ReceiptStatus
     uploaded_at: datetime | None
     processed_at: datetime | None
+    purchase_id: UUID | None = None
+    attempt_count: int = 0
+    failure_code: str | None = None
+    failure_message: str | None = None
 
 
 class ExtractionRunView(View):

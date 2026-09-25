@@ -49,3 +49,15 @@ outbox foundation. See [ADR-005](../decisions/ADR-005-canonical-purchase-foundat
 for exact nullability, NUMERIC(20,6), duplicate rules, ownership foreign keys,
 reference-data scope, and intentional deletion behavior. No catalog taxonomy is
 seeded and no existing identity data is rewritten.
+
+## Milestone 3 schema
+
+Revision `0003_receipt_ingestion` adds receipt lease tokens/expiration, attempt
+counts, and safe failure fields. Outbox events gain a receipt ownership foreign
+key and availability timestamp. A check constraint requires exactly the correct
+aggregate link for RECEIPT_UPLOADED or PURCHASE_CREATED; receipt/event uniqueness
+and the existing purchase/receipt uniqueness enforce idempotency. No new tables
+or canonical monetary changes are introduced. See ADR-006 for transaction and
+recovery rules. Downgrading to M2 discards upload-delivery events and ingestion
+state fields, while retaining canonical purchases and PURCHASE_CREATED events;
+test downgrades run only on the disposable database.

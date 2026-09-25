@@ -39,3 +39,17 @@ The outbox event is created in the same database transaction as the state change
 Canonical database state and its corresponding outbox event must be written in
 the same PostgreSQL transaction. Milestones 0–1 provide only a worker package
 skeleton; no queue, outbox dispatcher, or domain event is implemented yet.
+
+## Milestone 3 implementation
+
+`python -m backend.worker` is a separate durable outbox poller. OutboxDispatcher
+delivers typed RECEIPT_UPLOADED event IDs through TaskQueue/LocalTaskQueue to
+ReceiptProcessor. It never runs inside the upload request. Local delivery is
+acknowledged in PostgreSQL on terminal processing; crashes leave pending events
+and expiring receipt leases. Retryable failures use persisted exponential backoff.
+The worker derives identity from the event and receipt, and final writes verify
+the current lease token. PURCHASE_CREATED remains pending for later consumers.
+
+Cloud Tasks/HTTP deployment remains a later adapter for the same task contract;
+there is no publicly exposed or unauthenticated worker endpoint. See ADR-006 and
+the receipt-ingestion workflow for the implemented lease/retry rules.

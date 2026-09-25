@@ -8,6 +8,7 @@ wallet_key.json
 # Raseed V2 generated files and local credentials
 .venv/
 .cache/
+.local/
 **/__pycache__/
 *.py[cod]
 .pytest_cache/

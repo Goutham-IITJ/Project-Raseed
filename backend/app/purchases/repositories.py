@@ -44,9 +44,9 @@ class ReceiptRepository(OwnedRepository):
 
     def get(self, receipt_id: UUID) -> Receipt:
         receipt = self._session.scalar(
-            select(Receipt).where(
-                Receipt.id == receipt_id, Receipt.user_id == self._current_user.id
-            )
+            select(Receipt)
+            .where(Receipt.id == receipt_id, Receipt.user_id == self._current_user.id)
+            .options(selectinload(Receipt.purchase))
         )
         if receipt is None:
             raise NotFound
@@ -56,6 +56,7 @@ class ReceiptRepository(OwnedRepository):
         return list(
             self._session.scalars(
                 select(Receipt)
+                .options(selectinload(Receipt.purchase))
                 .where(Receipt.user_id == self._current_user.id)
                 .order_by(Receipt.created_at.desc(), Receipt.id.desc())
                 .limit(page.limit)

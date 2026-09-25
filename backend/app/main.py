@@ -18,6 +18,8 @@ from backend.app.config import Settings
 from backend.app.database import make_engine, make_session_factory
 from backend.app.identity.context import TokenVerifier
 from backend.app.identity.firebase import FirebaseTokenVerifier
+from backend.app.ingestion.factory import make_storage
+from backend.app.ingestion.storage import ObjectStorage
 from backend.app.purchases.errors import DomainError
 
 logger = logging.getLogger(__name__)
@@ -36,6 +38,7 @@ def create_app(
     *,
     verifier: TokenVerifier | None = None,
     session_factory: sessionmaker[Session] | None = None,
+    storage: ObjectStorage | None = None,
 ) -> FastAPI:
     config = settings or Settings()
     engine = make_engine(config.database_url) if session_factory is None else None
@@ -57,6 +60,8 @@ def create_app(
     application = FastAPI(title="Raseed V2", version="0.1.0", lifespan=lifespan)
     application.state.session_factory = factory
     application.state.token_verifier = token_verifier
+    application.state.settings = config
+    application.state.object_storage = storage if storage is not None else make_storage(config)
     application.add_middleware(
         CORSMiddleware,
         allow_origins=config.cors_origins,

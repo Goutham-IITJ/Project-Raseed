@@ -9,6 +9,7 @@ from sqlalchemy import (
     ForeignKey,
     ForeignKeyConstraint,
     Index,
+    Integer,
     Numeric,
     String,
     Text,
@@ -64,6 +65,8 @@ class Receipt(Timestamps, Base):
             name="pending_has_no_artifact",
         ),
         Index("ix_receipts_user_created", "user_id", "created_at", "id"),
+        CheckConstraint("attempt_count >= 0", name="attempt_count_nonnegative"),
+        CheckConstraint("(lease_token IS NULL) = (lease_expires_at IS NULL)", name="lease_pair"),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
@@ -77,6 +80,16 @@ class Receipt(Timestamps, Base):
     status: Mapped[str] = mapped_column(String(20), server_default="PENDING_UPLOAD")
     uploaded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    lease_token: Mapped[UUID | None] = mapped_column()
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    attempt_count: Mapped[int] = mapped_column(Integer, server_default="0")
+    failure_code: Mapped[str | None] = mapped_column(String(100))
+    failure_message: Mapped[str | None] = mapped_column(String(500))
+    purchase: Mapped["Purchase | None"] = relationship(viewonly=True)
+
+    @property
+    def purchase_id(self) -> UUID | None:
+        return self.purchase.id if self.purchase is not None else None
 
 
 class ExtractionRun(Base):
@@ -301,7 +314,7 @@ class Payment(Base):
 
 
 class OutboxEvent(Base):
-    """Durable purchase-created event only; publishing belongs to Milestone 3."""
+    """Durable upload jobs and canonical purchase events."""
 
     __tablename__ = "outbox_events"
     __table_args__ = (
@@ -311,18 +324,41 @@ class OutboxEvent(Base):
             name="fk_outbox_events_purchase_owner",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["receipt_id", "user_id"],
+            ["receipts.id", "receipts.user_id"],
+            name="fk_outbox_events_receipt_owner",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint("purchase_id", "event_type", name="uq_outbox_events_purchase_type"),
-        CheckConstraint("event_type = 'PURCHASE_CREATED'", name="event_type_supported"),
+        UniqueConstraint("receipt_id", "event_type", name="uq_outbox_events_receipt_type"),
+        CheckConstraint(
+            "(event_type = 'PURCHASE_CREATED' AND purchase_id IS NOT NULL "
+            "AND receipt_id IS NULL) "
+            "OR (event_type = 'RECEIPT_UPLOADED' AND receipt_id IS NOT NULL "
+            "AND purchase_id IS NULL)",
+            name="event_type_supported",
+        ),
         Index(
             "ix_outbox_events_pending", "created_at", postgresql_where=text("published_at IS NULL")
         ),
         Index("ix_outbox_events_user", "user_id"),
+        Index(
+            "ix_outbox_events_available",
+            "available_at",
+            "id",
+            postgresql_where=text("published_at IS NULL AND event_type = 'RECEIPT_UPLOADED'"),
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     user_id: Mapped[UUID] = mapped_column()
-    purchase_id: Mapped[UUID] = mapped_column()
+    purchase_id: Mapped[UUID | None] = mapped_column()
+    receipt_id: Mapped[UUID | None] = mapped_column()
     event_type: Mapped[str] = mapped_column(String(40))
     payload: Mapped[dict[str, str]] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    available_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

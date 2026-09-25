@@ -1,8 +1,9 @@
-# Raseed API v1 — identity and canonical purchase foundation
+# Raseed API v1 — identity, purchases, and receipt ingestion
 
 ## Transport, versioning, authentication
 
-JSON endpoints live under `/api/v1`. Breaking contracts require a new API version
+Endpoints live under `/api/v1`; responses use JSON and binary uploads use multipart.
+Breaking contracts require a new API version
 and ADR. Use HTTPS in production. CORS permits explicitly configured web origins.
 Every endpoint below requires `Authorization: Bearer <Firebase ID token>`.
 The Firebase Admin SDK verifies tokens; uid resolves to an internal UUID through
@@ -16,7 +17,8 @@ requests are rejected before provisioning or reading user data.
 
 ## Success responses
 
-Reads and updates return HTTP 200; receipt metadata creation returns 201.
+Reads and updates return HTTP 200; receipt metadata creation returns 201;
+accepted binary uploads return 202.
 Responses use `{"data": ...}`. UUIDs are strings and
 timestamps are ISO 8601 UTC values. Responses use `Cache-Control: no-store`.
 
@@ -57,6 +59,10 @@ committed atomically. Concurrent partial updates preserve unrelated fields.
 - 422 `validation_error`: invalid body, unsupported field/query, or setting value.
 - 404 `not_found`: resource missing or owned by another user (same response).
 - 409 `conflict`: duplicate receipt hash or other conflicting canonical identity.
+- 413 `upload_too_large`: upload exceeds the configured byte limit.
+- 415 `unsupported_receipt`: unsupported or invalid file content, MIME/extension
+  mismatch, encrypted PDF, or excessive PDF page count.
+- 503 `storage_unavailable`: private object storage could not accept the receipt.
 - 503 `authentication_unavailable`: identity verification infrastructure unavailable.
 - 503 `database_unavailable`: database operation unavailable.
 - 500 `internal_error`: unexpected failure, without internal details or token contents.
@@ -68,13 +74,46 @@ committed atomically. Concurrent partial updates preserve unrelated fields.
 It does not provision users or imply database/Firebase readiness. API docs are
 available at `/docs`. No other product API is implemented in Milestones 0–1.
 
-## Milestone 2 receipt metadata and purchase reads
+## Receipt binary upload (Milestone 3)
+
+### POST /api/v1/receipts — multipart/form-data
+
+Send exactly one `file` part with an original filename and MIME type. Supported
+extensions: .jpg/.jpeg (image/jpeg), .png (image/png), .pdf (application/pdf).
+Content is inspected, not trusted from the header. Default maximum: 10 MiB;
+PDFs must be unencrypted with 1–20 pages. Extra form fields/files or query
+parameters are rejected. Authentication occurs before multipart parsing.
+
+The backend computes SHA-256, reserves metadata, stores the private original,
+then commits UPLOADED and its durable processing event. It returns 202 with
+`{"data": {receipt fields}}` and `status: "UPLOADED"`. No model runs in the HTTP
+request. Poll GET /receipts/{id} for processing completion. Duplicate stored
+content for the same user returns 409, regardless of filename. Other users may
+upload identical content independently. Failed/expired incomplete upload
+reservations can be retried by posting the same bytes; the receipt ID is retained.
+
+Receipt views retain the existing metadata fields and add:
+
+- `purchase_id`: UUID or null; populated after canonical processing succeeds.
+- `attempt_count`: attempts in the current processing retry cycle, initially zero.
+- `failure_code`, `failure_message`: safe review/failure information or null.
+
+`status` is the processing state; `uploaded_at` and `processed_at` distinguish
+artifact acceptance and canonical completion. No internal storage URI, user ID,
+lease, prompt, raw provider response, or credentials are returned. No private
+file-download endpoint is currently needed or exposed.
+
+NEEDS_REVIEW is terminal until explicit operator reprocessing; FAILED may be
+scheduled for bounded automatic retry or need operator attention. This milestone
+does not expose a public correction or retry endpoint. See the ingestion workflow.
+
+## Compatible Milestone 2 receipt metadata and purchase reads
 
 All endpoints below require the same Firebase authentication. `storage_uri`,
 user IDs, extraction outputs, and payment credentials are never accepted by the
-metadata API. A POST does not upload content or invoke an AI provider.
+metadata API. A JSON metadata POST does not upload content or invoke an AI provider.
 
-### POST /api/v1/receipts
+### POST /api/v1/receipts — application/json
 
 ```json
 {
@@ -103,7 +142,8 @@ timestamp first with UUID as a stable tie-breaker. Optional `limit` (1–100, de
 
 ### GET /api/v1/receipts/{id}
 
-Returns a single metadata view. Invalid UUID: 422. Missing or cross-user UUID: 404.
+Returns metadata and the processing fields documented above. Invalid UUID: 422.
+Missing or cross-user UUID: 404.
 
 ### GET /api/v1/purchases
 
