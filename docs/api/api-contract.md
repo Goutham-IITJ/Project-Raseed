@@ -1,4 +1,4 @@
-# Raseed API v1 — identity, purchases, receipts, inventory, and analytics
+# Raseed API v1 — identity, purchases, receipts, inventory, analytics, and assistant
 
 ## Transport, versioning, authentication
 
@@ -375,5 +375,235 @@ current minus comparison. Percentage change is delta / comparison * 100, or null
 when the comparison total is zero (including zero-to-zero). The two ranges and
 preferences are read from one consistent PostgreSQL snapshot.
 
-Budget persistence, recurrence inference, assistant/tool integration, and later
-insight features remain deferred. These endpoints perform no provider calls.
+Budget persistence, recurrence inference, and later insight features remain
+deferred. These analytics endpoints perform no provider calls.
+
+## Assistant (Milestone 6)
+
+These routes use the same authentication, ownership, validation, error envelope,
+and no-store headers. The model cannot select an owner, provider, role, SQL query,
+or arbitrary tool. Tools are internal to orchestration; there is no public tool
+execution endpoint. See [ADR-009](../decisions/ADR-009-assistant-tools.md).
+
+### POST /api/v1/assistant/conversations
+
+Body: `{}` or `{"title":"September purchases"}`. Title is nullable, nonblank when
+present, and at most 200 characters. Unknown fields/query parameters are rejected.
+Returns 201 with `{"data":{"id": "...", "title": "...", "created_at": "...",
+"updated_at": "..."}}`. Timestamps are UTC. No model is called.
+
+### GET /api/v1/assistant/conversations/{id}
+
+Returns the same conversation view with 200. No query parameters are accepted.
+Missing and foreign conversations return the same 404 `not_found` response.
+
+### POST /api/v1/assistant/conversations/{id}/messages
+
+```json
+{"content":"What did I spend last month?","idempotency_key":"a4a5c5c3-12e9-49e3-aab3-a1f7c4d71c71"}
+```
+
+Both fields are required. Content is nonblank text, at most 8000 characters, without
+NUL. The UUID key identifies one submission within this conversation. Exact content
+is retained and compared on replay; the backend does not normalize message text.
+Unknown fields/query parameters are rejected. The server reserves a user message
+and its assistant reply, performs a bounded synchronous assistant turn, and saves
+the result before returning.
+
+A new completed turn returns 201:
+
+```json
+{"data":{"user_message":{},"assistant_message":{},"replayed":false}}
+```
+
+The objects are the full message views below. An identical completed replay returns
+200 with the original messages and `replayed:true`, without new model/tool calls.
+An identical request still processing returns 202 with the existing PROCESSING
+reply. A changed body under the same key or another new message while this
+conversation is processing returns 409 `conflict`. Separate conversations can
+proceed independently.
+
+A failed turn returns the standard safe error envelope and remains available in
+message history. Replaying its key returns the same failure without execution.
+Retry with a new key to create a new turn. Processing leases expire after the turn
+limit plus thirty seconds; a subsequent POST marks an expired reply and any running
+tools failed before handling the request. GET never restarts or changes a turn.
+
+Assistant failures:
+
+| Status | Code | Meaning |
+| --- | --- | --- |
+| 503 | provider_configuration | Assistant key/model configuration unavailable |
+| 503 | model_unavailable | Provider failed or exhausted transient retries |
+| 503 | assistant_unavailable | Internal execution unavailable; safe failure persisted when possible |
+| 504 | model_timeout | Provider request timed out after bounded retries |
+| 504 | assistant_timeout | Total turn time limit reached |
+| 504 | request_expired | Interrupted turn's lease expired; a new key is needed |
+| 502 | model_invalid_output | Malformed, incomplete, or ungrounded model output |
+| 502 | model_refused | Provider declined to return an answer |
+| 502 | assistant_limit | Model/tool/context execution limit reached |
+| 502 | tool_call_conflict | Same provider call ID reused with a different tool/payload |
+
+Tool failures normally become structured feedback to the model. The assistant may
+explain unavailable data or correct the query. They do not become fictitious
+successful results or necessarily fail the whole turn. Database outages retain the
+existing 503 `database_unavailable` behavior; an unfinishable reply remains subject
+to lease recovery.
+
+### GET /api/v1/assistant/conversations/{id}/messages
+
+Returns `{"data":[message,...]}`, ordered by stable, increasing conversation
+sequence. Only `limit` (1–100, default 20) and `offset` (0–10000, default 0) are
+accepted. An owned empty conversation returns an empty array. Missing/foreign
+conversations return 404. User and assistant messages each occupy one page row.
+
+Message fields:
+
+- `id`, `conversation_id`, `sequence`, `role` (USER/ASSISTANT), and `status`
+  (PROCESSING/COMPLETED/FAILED).
+- `content`: original user text or the rendered assistant reply; null while an
+  assistant is processing or failed. `reply_to_id` is the user message UUID for
+  assistant replies; `idempotency_key` appears only on the submitted user message.
+- `provenance`: OBSERVED user input or INFERRED assistant prose.
+- `evidence`: null except for completed assistant replies. Contains `kind`
+  (answer/clarification/unavailable), `source_call_ids`, and `citations`. Each
+  citation records its placeholder name, call ID, tool execution UUID, tool name,
+  JSON pointer and exact scalar value. Monetary values remain decimal strings;
+  unknown values remain null and render as “unknown”. Sources refer to persisted
+  tool executions associated with this reply, never another turn.
+- `provider`, `model`, `prompt_version`, `schema_version`, and `model_attempts`
+  record orchestration provenance; nullable metadata and zero attempts on USER.
+- `failure_code`/`failure_message` are safe, non-null only on FAILED replies.
+- `created_at`, nullable `completed_at`, and `tool_executions`.
+
+Tool execution views include `id`, `message_id`, `call_id`, `tool_name`, bounded
+`raw_arguments`, nullable validated `arguments`, `status` (RUNNING/SUCCEEDED/FAILED),
+nullable `result`, `started_at`, nullable `completed_at`, and nullable `elapsed_ms`.
+Terminal results have `{"status":"SUCCEEDED","data":...,"error":null}` or
+`{"status":"FAILED","data":null,"error":{"code":"...","message":"..."}}`.
+No lease tokens, ownership IDs, database details, raw provider responses, or
+reasoning content are exposed.
+
+The eleven approved tools delegate to the implemented analytics, purchase, and
+inventory services. Financial tools preserve the analytics response shapes under
+result.data. Purchase tools wrap the canonical view under `purchase`, with OBSERVED
+provenance and without payment provider/reference/last4 metadata. History and
+inventory collections return `items`, `limit`, `offset`, and provenance; they are
+pages, not unbounded totals. Inventory detail retains its existing typed view and
+expiry evidence. Empty collections and null unknowns preserve their service meaning.
+No tool result is silently truncated when it exceeds the 64 KiB result limit.
+
+Assistant content is plain text. Clients must escape it or use a safe Markdown
+renderer. Cited values are resolved by application code from recorded tool results;
+explanatory prose remains inferred and does not become canonical financial state.
+
+## Long-term memory (Milestone 7)
+
+Memory is explicit user-confirmed information, separate from conversation history.
+All routes authenticate and scope ownership on the server, reject extra fields,
+and return no-store responses. Missing and foreign IDs both return 404. See
+[ADR-010](../decisions/ADR-010-memory-insights.md) for retrieval and provenance.
+
+### POST /api/v1/memories
+
+```json
+{"type":"PREFERENCE","content":"I am vegetarian","topics":["food"],"expires_at":null,"source_message_id":null}
+```
+
+`type` and `content` are required. Types: PREFERENCE, GOAL, HABIT, CONSTRAINT, FACT.
+Content is nonblank PostgreSQL-safe UTF-8 text, at most 1000 characters. Optional
+topics are a unique list drawn from food, spending, inventory, shopping, goals.
+An optional expiry must include a timezone and be in the future. An optional source
+message must be an owned USER message. Creation itself is the user's explicit
+confirmation; model output or a saved conversation is not automatic consent.
+
+Returns 201 `{"data":memory}`. The view contains id, type, content, topics,
+source=USER_EXPLICIT, provenance=OBSERVED, confidence (exact decimal string),
+source_message_id, expires_at, version, created_at, and updated_at. Confidence 1
+records explicit assertion, not verification of the underlying financial claim.
+Ownership/internal search columns are not returned. No profile setting is changed.
+
+### GET /api/v1/memories
+
+Returns 200 `{"data":[memory,...]}`. Query parameters: limit (1–100, default 20),
+offset (0–10000, default 0), optional type, optional nonblank query (1000 characters),
+and include_expired (default false). Without query this is a management list;
+with query it is a ranked lexical/topic search. Ties use updated_at and UUID.
+An empty/no-match search returns an empty list. Search text is bound as data.
+
+### GET /api/v1/memories/{id}
+
+Returns 200 `{"data":memory}`, including an expired record when explicitly selected.
+
+### PATCH /api/v1/memories/{id}
+
+Explicit replacement using the POST fields plus required positive integer
+`expected_version`. Supply the desired type/content/topics/expiry/source message;
+omitted optional fields reset to their POST defaults. Success returns 200 with the
+version incremented. A stale version returns 409. Invalid expiry or fields return
+422. An owned new source message can replace the prior source link.
+
+### DELETE /api/v1/memories/{id}?expected_version=1
+
+Returns 204 after deleting the owned memory, or 409 for a stale version. The version
+query parameter is required and no others are accepted. This explicit API request
+is the user control; it is not a model-selected tool. Deletion removes future
+memory retrieval. Existing conversation responses and tool audits retain their
+historical contents.
+
+## Insights (Milestone 7)
+
+The worker generates insights; these APIs never generate or recalculate them.
+Types: SPENDING_CHANGE, UNUSUAL_PURCHASE, INVENTORY_EXPIRY. Exact rule thresholds,
+calendar boundaries and source semantics are in ADR-010. No live model is required.
+
+### GET /api/v1/insights
+
+Returns 200 `{"data":[insight,...]}` ordered by created_at/UUID descending. Accepts
+limit/offset with the same bounds as memories, optional type, and optional status
+(ACTIVE, READ, DISMISSED, RESOLVED, EXPIRED). Omitting status returns only unexpired
+ACTIVE/READ records. Expiry is enforced on reads even if the worker is offline.
+An explicit EXPIRED query includes active/read rows whose expiry has passed.
+
+An insight contains id, type, title, summary, source_data, calculation,
+provenance=DERIVED, nullable exact confidence, status, version, created_at,
+updated_at, evaluated_at, expires_at, nullable read_at and dismissed_at. Confidence
+is null for financial thresholds and preserves the expiry evidence's confidence
+for inventory. Source data includes the service metrics and their periods, or the
+owned inventory lot projection with its original source/provenance/version.
+Calculation includes the versioned rule and thresholds. Monetary and quantity
+values are exact strings. No ownership IDs, delivery state or internal keys appear.
+
+### GET /api/v1/insights/{id}
+
+Returns 200 `{"data":insight}` including historical/inactive records. No query
+parameters are accepted. Missing/foreign IDs return the same 404. Recorded evidence
+is a snapshot at evaluated_at, not a claim about current stock or spending.
+
+### PATCH /api/v1/insights/{id}
+
+```json
+{"status":"DISMISSED","expected_version":1}
+```
+
+The only user-controlled target statuses are READ and DISMISSED. An active/read
+insight can be marked read or dismissed; stale versions or other transitions return
+409. Repeating the current status with its current version returns the unchanged
+view. Returns 200 `{"data":insight}`. The worker preserves dismissal when the same
+signal is evaluated again. No public insight creation/deletion endpoint is added.
+
+## Assistant memory and insight integration (Milestone 7)
+
+The assistant prompt is versioned assistant.v2; the final-answer schema is unchanged.
+Before the model call the service retrieves at most five relevant, unexpired owned
+memories within an 8 KiB budget. Memory content is untrusted context, not instructions
+or canonical financial evidence. Transcripts are never automatically saved as memory.
+
+The registry now has fourteen read tools. get_memories requires a bounded query
+and returns up to five matches under data.items, with OBSERVED provenance and each
+statement's metadata. get_insights accepts limit/offset and returns current active
+insights under data.items; get_insight requires insight_id and returns the full view.
+Insight citations can reference data.source_data scalars using M6's grounding rules.
+There are no memory write tools; explicit creation/correction/deletion uses the
+memory API above. For current financial or inventory answers the assistant continues
+to use the original canonical tools.

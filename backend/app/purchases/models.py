@@ -330,6 +330,24 @@ class OutboxEvent(Base):
     __tablename__ = "outbox_events"
     __table_args__ = (
         ForeignKeyConstraint(
+            ["user_id"], ["users.id"], name="fk_outbox_events_user", ondelete="RESTRICT"
+        ),
+        ForeignKeyConstraint(
+            ["insight_id", "user_id"],
+            ["insights.id", "insights.user_id"],
+            name="fk_outbox_events_insight_owner",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["evaluation_lot_id", "user_id"],
+            ["inventory_lots.id", "inventory_lots.user_id"],
+            name="fk_outbox_events_evaluation_lot_owner",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("insight_id", name="uq_outbox_events_insight"),
+        UniqueConstraint("user_id", "schedule_key", name="uq_outbox_events_user_schedule"),
+        CheckConstraint("insight_attempt_count >= 0", name="insight_attempt_count"),
+        ForeignKeyConstraint(
             ["inventory_event_id", "user_id"],
             ["inventory_events.id", "inventory_events.user_id"],
             name="fk_outbox_events_inventory_owner",
@@ -352,13 +370,30 @@ class OutboxEvent(Base):
         UniqueConstraint("purchase_id", "event_type", name="uq_outbox_events_purchase_type"),
         UniqueConstraint("receipt_id", "event_type", name="uq_outbox_events_receipt_type"),
         CheckConstraint(
-            "(event_type = 'PURCHASE_CREATED' AND purchase_id IS NOT NULL "
+            "((event_type = 'PURCHASE_CREATED' AND purchase_id IS NOT NULL "
             "AND receipt_id IS NULL AND inventory_event_id IS NULL) "
             "OR (event_type = 'RECEIPT_UPLOADED' AND receipt_id IS NOT NULL "
             "AND purchase_id IS NULL AND inventory_event_id IS NULL) "
             "OR (event_type = 'INVENTORY_CHANGED' AND inventory_event_id IS NOT NULL "
-            "AND purchase_id IS NULL AND receipt_id IS NULL)",
+            "AND purchase_id IS NULL AND receipt_id IS NULL)) "
+            "AND insight_id IS NULL AND evaluation_lot_id IS NULL AND schedule_key IS NULL "
+            "OR (event_type = 'INSIGHT_CREATED' AND insight_id IS NOT NULL "
+            "AND purchase_id IS NULL AND receipt_id IS NULL AND inventory_event_id IS NULL "
+            "AND evaluation_lot_id IS NULL AND schedule_key IS NULL) "
+            "OR (event_type = 'INSIGHT_EVALUATION_REQUESTED' AND schedule_key IS NOT NULL "
+            "AND length(schedule_key) > 0 AND purchase_id IS NULL AND receipt_id IS NULL "
+            "AND inventory_event_id IS NULL AND insight_id IS NULL)",
             name="event_type_supported",
+        ),
+        Index(
+            "ix_outbox_events_insight_ready",
+            "insight_available_at",
+            "id",
+            postgresql_where=text(
+                "insight_processed_at IS NULL AND insight_failed_at IS NULL "
+                "AND event_type IN ('PURCHASE_CREATED', 'INVENTORY_CHANGED', "
+                "'INSIGHT_EVALUATION_REQUESTED')"
+            ),
         ),
         Index(
             "ix_outbox_events_pending", "created_at", postgresql_where=text("published_at IS NULL")
@@ -385,6 +420,16 @@ class OutboxEvent(Base):
     purchase_id: Mapped[UUID | None] = mapped_column()
     receipt_id: Mapped[UUID | None] = mapped_column()
     inventory_event_id: Mapped[UUID | None] = mapped_column()
+    insight_id: Mapped[UUID | None]
+    evaluation_lot_id: Mapped[UUID | None]
+    schedule_key: Mapped[str | None] = mapped_column(String(240))
+    insight_processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    insight_available_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    insight_attempt_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    insight_failure_code: Mapped[str | None] = mapped_column(String(100))
+    insight_failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     attempt_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     failure_code: Mapped[str | None] = mapped_column(String(100))
     failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

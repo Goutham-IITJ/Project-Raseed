@@ -38,6 +38,16 @@ Provider-neutral assistant loop:
 7. Model synthesizes user-facing answer.
 8. Persist message and tool execution metadata.
 
+Milestone 6 implements AssistantModel and the closed read-tool registry in
+`backend/app/assistant`. The first adapter uses OpenAI Responses HTTP; provider
+transport and continuation state stay in the adapter. Application orchestration
+owns bounded retries, argument/result validation, deterministic service dispatch,
+leases, idempotency and persistence. Model synthesis references recorded result
+scalars; application code renders exact values and stores citations. The adapter
+is replaceable through the protocol and is injected with fakes in tests. See
+[ADR-009](../decisions/ADR-009-assistant-tools.md) for the concrete contract and
+the limits of semantic validation. No memory or insight generator is added in M6.
+
 ## Tool safety
 
 - Tool set is allowlisted per assistant context.
@@ -56,6 +66,24 @@ Initial logical routing:
 - Insight wording: lower-cost model where the numerical/analytical result is already deterministic.
 
 The exact production model IDs remain configuration, not domain logic.
+
+## Milestone 7 memory and insight context
+
+AssistantService retrieves at most five relevant unexpired owned memories within
+8 KiB before each turn. The provider-neutral ModelContext carries those statements
+as structured data. The OpenAI adapter places them in an explicitly untrusted user
+input block, never in instructions. Prompt version assistant.v2 distinguishes this
+behavior from M6. Conversation history and durable memory remain separate.
+
+get_memories, get_insights and get_insight extend the registry to fourteen approved
+read tools. Memory writes require explicit user API actions through MemoryService;
+model-selected mutation tools are not enabled. Current numbers still come from
+canonical financial/inventory tools, and insight citations refer to their recorded
+source snapshots with evaluation/expiry/provenance intact.
+
+InsightGenerator is a narrow explanation protocol over validated canonical evidence.
+Its first implementation is deterministic templating, so insight generation needs
+no model credentials or speculative prose. No new AI provider is configured for M7.
 
 ## Prompt versioning
 

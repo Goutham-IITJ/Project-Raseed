@@ -13,9 +13,14 @@ from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
 from backend.app.api.analytics import router as analytics_router
+from backend.app.api.assistant import router as assistant_router
+from backend.app.api.insights import router as insights_router
 from backend.app.api.inventory import router as inventory_router
+from backend.app.api.memory import router as memory_router
 from backend.app.api.purchases import router as purchase_router
 from backend.app.api.routes import router
+from backend.app.assistant.factory import make_assistant_model
+from backend.app.assistant.model import AssistantModel
 from backend.app.config import Settings
 from backend.app.database import make_engine, make_session_factory
 from backend.app.identity.context import TokenVerifier
@@ -41,6 +46,7 @@ def create_app(
     verifier: TokenVerifier | None = None,
     session_factory: sessionmaker[Session] | None = None,
     storage: ObjectStorage | None = None,
+    assistant_model: AssistantModel | None = None,
 ) -> FastAPI:
     config = settings or Settings()
     engine = make_engine(config.database_url) if session_factory is None else None
@@ -64,10 +70,13 @@ def create_app(
     application.state.token_verifier = token_verifier
     application.state.settings = config
     application.state.object_storage = storage if storage is not None else make_storage(config)
+    application.state.assistant_model = (
+        assistant_model if assistant_model is not None else make_assistant_model(config)
+    )
     application.add_middleware(
         CORSMiddleware,
         allow_origins=config.cors_origins,
-        allow_methods=["GET", "PATCH", "POST"],
+        allow_methods=["GET", "PATCH", "POST", "DELETE"],
         allow_headers=["Authorization", "Content-Type"],
     )
 
@@ -117,6 +126,9 @@ def create_app(
     application.include_router(purchase_router)
     application.include_router(inventory_router)
     application.include_router(analytics_router)
+    application.include_router(assistant_router)
+    application.include_router(memory_router)
+    application.include_router(insights_router)
     return application
 
 

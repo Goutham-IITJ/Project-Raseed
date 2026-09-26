@@ -45,6 +45,20 @@ Completed checks and files are listed in the
 Milestone 5 adds deterministic financial analytics and filtered purchase history.
 Calculation, currency, date, and API clarifications are in
 [ADR-008](decisions/ADR-008-financial-analytics.md) and the financial-query workflow.
-Budgets and all assistant/insight integrations remain deferred. Validation and
+Budgets and insight integrations remain deferred. Validation and
 the changed-file inventory are in the
 [Milestone 5 checkpoint](implementation/milestone-5-validation.md).
+
+Milestone 6 adds persisted conversations, bounded assistant orchestration, and
+eleven approved financial/purchase/inventory read tools. See
+[ADR-009](decisions/ADR-009-assistant-tools.md), the assistant API contract, and the
+[Milestone 6 checkpoint](implementation/milestone-6-validation.md). Long-term
+memory and proactive insights build on this foundation in Milestone 7.
+
+Milestone 7 adds explicit long-term memory controls, bounded relevant assistant
+recall, and asynchronous canonical spending/inventory insights. See
+[ADR-010](decisions/ADR-010-memory-insights.md), the memory/insight API contracts,
+[the workflow](workflows/memory-insights.md), and the
+[Milestone 7 checkpoint](implementation/milestone-7-validation.md).
+Wallet, market intelligence, notifications, budgets, recurrence, and assistant
+mutation tools remain deferred.

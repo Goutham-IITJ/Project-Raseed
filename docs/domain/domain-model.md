@@ -125,9 +125,32 @@ inventory workflow for eligibility, event types, transactions and API semantics.
 ### Conversation / Message / ToolExecution
 - persistent assistant conversation and auditable tool calls
 
+Milestone 6 conversations are owned by one authenticated user. Messages reserve
+ordered USER/ASSISTANT pairs with a per-conversation idempotency key and one reply
+per user message. Assistant replies move from PROCESSING to COMPLETED or FAILED;
+leases fence stale workers and only one turn can process per conversation.
+Tool executions belong to the assistant reply and retain their name, call ID,
+arguments, structured result/error, status, and timing. Composite ownership FKs
+prevent linking messages or executions across owners/conversations. Model wording
+is INFERRED; cited values resolve from canonical service results. See ADR-009.
+
 ### Memory
 - durable user preference/goal/habit/constraint/fact
 - source and confidence metadata
+
+Milestone 7 stores explicit user-confirmed memories independently of messages.
+Each has an owned UUID, typed content, optional relevance topics and expiry,
+USER_EXPLICIT source, OBSERVED provenance, confidence 1 for the assertion,
+optional owned USER-message source, version and timestamps. Version guards protect
+corrections/deletion. Expired/deleted memories are excluded from future assistant
+retrieval. Memory never replaces canonical user settings or financial records.
+
+M7 insights retain typed canonical source snapshots, versioned calculation rules,
+deterministic title/summary, DERIVED provenance, nullable confidence, expiry,
+evaluation/update times, version and ACTIVE/READ/DISMISSED/RESOLVED/EXPIRED status.
+User dismissal survives refresh of the same logical signal. The worker generates
+spending-change, unusually large purchase and recorded-inventory-expiry observations.
+See [ADR-010](../decisions/ADR-010-memory-insights.md).
 
 ### MarketPriceObservation
 - normalized product/merchant/price/currency/location

@@ -101,3 +101,56 @@ multi-query analytics consistent preferences and purchase snapshots; existing
 write transactions retain READ COMMITTED. No materialized financial table, new
 event consumer, or budget persistence is added. Index-only downgrade preserves
 all canonical and inventory records. See ADR-008.
+
+## Milestone 6 assistant persistence
+
+Revision `0006_assistant_tools` adds the three blueprint entities only:
+
+- conversations: owned UUID, nullable title, next message sequence, UTC timestamps.
+- messages: owned conversation/sequence, role/status/content, submission key or
+  unique reply link, model/prompt/schema provenance, attempt count, safe failure
+  fields, processing lease, timestamps, and bounded JSONB answer evidence.
+- tool_executions: owned assistant-message link, unique per-message provider call
+  ID, tool name, raw/validated arguments, request hash, structured result/error,
+  status, and start/end/elapsed timing.
+
+Composite foreign keys enforce conversation and reply/execution ownership.
+Checks enforce role-specific fields, terminal content/error/evidence, and lease
+lifecycle. Unique keys enforce conversation sequence, submission idempotency,
+one reply per user message, and one PROCESSING reply per conversation. Indexes
+support owner/conversation message order and per-message tool history. JSONB holds
+only bounded tool payloads and response evidence; relational ownership and state
+remain normal columns. No provider reasoning or raw response is persisted.
+
+Services reserve, audit, and finalize in short transactions. Provider calls and
+backoff hold no database transaction or row lock. Domain tools retain their own
+service transaction rules; repeated call IDs replay the persisted result. Upgrade
+preserves M1–M5 data. Downgrade drops assistant history only. See ADR-009 for stale
+lease recovery, limits, retry semantics, and evidence validation.
+
+## Milestone 7 memory and insights
+
+Revision `0007_memory_insights` adds `memories` and `insights`. Both use explicit
+user foreign keys, UUIDs, UTC timestamps and version guards. Memory's optional
+message/conversation/owner composite FK protects source attribution. Type, explicit
+source/provenance/confidence, content, expiry and version checks enforce its domain.
+A GIN simple-language full-text index supports relevance alongside owner/time/expiry
+indexes. The searchable text is a derived projection of content and relevance topics.
+
+Insights have unique owner/deduplication keys, constrained lifecycle/provenance and
+confidence, bounded source/calculation JSONB, and owner/status/expiry, creation and
+scope indexes. Canonical financial values in evidence serialize as exact strings.
+Inventory source records preserve their lot version and expiry provenance.
+
+Outbox gains insight and evaluation-lot ownership FKs, unique insight and per-owner
+schedule keys, and independent insight delivery state: insight_processed_at,
+insight_available_at, insight_attempt_count, insight_failure_code, insight_failed_at.
+The existing published_at and retry fields retain their M3/M4 meaning. A partial
+index selects ready insight jobs. The event-kind/link constraint additionally
+allows INSIGHT_EVALUATION_REQUESTED and INSIGHT_CREATED; all events gain a direct
+user FK. Existing domain events are marked evaluated only for the new subscriber;
+daily scheduling evaluates current data without replaying every historical event.
+
+Upgrade preserves M1–M6 tables and original delivery state. Downgrade removes only
+M7 memories, insights, event kinds, links and subscriber fields. Tests compare
+canonical/M6 rows and original outbox state across the round trip. See ADR-010.

@@ -64,3 +64,28 @@ roll back purchase success. Bounded retries/manual requeue use outbox delivery
 fields; receipt leases are unchanged. Inventory is the sole purchase subscriber
 in M4; INVENTORY_CHANGED remains pending. Later multiple subscribers require an
 explicit fan-out contract. See ADR-007 and the inventory workflow.
+
+## Milestone 7 implementation
+
+InsightDispatcher/InsightTaskQueue/InsightProcessor join the same separate poller.
+PURCHASE_CREATED now has independent inventory and insight acknowledgement/retry
+state on its durable outbox row. INVENTORY_CHANGED has the insight subscriber;
+the original published_at remains available for its future downstream contract.
+INSIGHT_CREATED is recorded atomically with a new insight and has no M8 consumer.
+
+The scheduler inserts uniquely keyed INSIGHT_EVALUATION_REQUESTED rows once per
+owner/local date/timezone, plus owned lot jobs through a set-based insert. Scheduling
+locks up to twenty due users with SKIP LOCKED; dispatch fetches at most twenty event
+IDs. More work is drained by subsequent polling iterations. This is durable daily
+evaluation, including clock-driven expiry, without API-side background tasks.
+
+Insight delivery locks its event and owner, reads canonical service snapshots,
+records observations and outgoing events, and acknowledges in one transaction.
+No model call is needed. Independent failures cannot steal or reset inventory
+acknowledgement. Retryable persistence failures get three attempts with five/ten
+second backoff; invalid domain data fails permanently. Failure codes and explicit
+operator requeue remain on the source outbox row. Duplicate delivery is a no-op.
+
+Explicit memory CRUD is a short authenticated service transaction. No automatic
+memory-extraction worker is introduced; saving every message is intentionally
+excluded. See [ADR-010](../decisions/ADR-010-memory-insights.md).

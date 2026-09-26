@@ -107,12 +107,15 @@ Preferences are canonical key/value rows with a synchronized user-profile
 projection. Defaults are INR, Asia/Kolkata, en-IN. Tokens, receipt contents, and
 database parameters are not included in application error responses/logs.
 
-Milestones 0–5 implement identity, canonical purchases, private receipt uploads,
+Milestones 0–7 implement identity, canonical purchases, private receipt uploads,
 and asynchronous extraction. Canonical purchase children, receipt success and
 PURCHASE_CREATED commit atomically. Inventory consumes that event and exposes
 owned stock/lot/history and correction APIs. Deterministic analytics reads canonical
 purchases directly and exposes filtered history, summaries, category/merchant
-breakdowns, and comparisons. Later integrations remain deferred.
+breakdowns, and comparisons. The assistant persists owned conversations and uses
+approved financial and inventory read tools. Later integrations remain deferred.
+Explicit long-term memory, relevant assistant recall, and asynchronous canonical
+spending/inventory insights are also implemented. Their APIs are available in `/docs`.
 The existing frontend remains the identity foundation;
 upload is available through the API and `/docs`.
 
@@ -227,4 +230,94 @@ all four analytics endpoints and filtered purchase history. Tests also cover
 mixed currencies, unknown line totals, split payments, DST boundaries, snapshot
 consistency, ownership, and index preservation across migration round trips.
 See the API contract and ADR-008 for precise metric/rounding semantics. Budget
-persistence, recurring-pattern inference, and Milestone 6 tools remain deferred.
+persistence and recurring-pattern inference remain deferred.
+
+## Assistant configuration and verification
+
+The four assistant routes are available in `/docs` under
+`/api/v1/assistant/conversations`. Conversation creation and history need no model
+credentials. Set `OPENAI_API_KEY` and `ASSISTANT_MODEL` in the ignored `.env` to
+enable the OpenAI Responses adapter. Choose a model available to your account that
+supports function calling and strict structured output. There is no hardcoded
+model default or production fake-provider switch. Missing configuration produces
+a safe, persisted failure when a message is submitted; startup makes no AI call.
+Receipt extraction continues to use its independent Gemini configuration.
+
+Each message POST requires `content` and a UUID `idempotency_key`. Reuse the key
+when recovering a lost HTTP response. A failed key retains its failure; explicitly
+retry with a new key. Concurrent new messages in one conversation return 409;
+identical requests still running return 202. Use GET messages to read persisted
+status, response evidence, and tool audit records. The default loop allows six
+model rounds, eight tool invocations and two attempts per provider request, with
+a twenty-second request timeout and two-minute turn limit. `.env.example` lists
+the bounded configuration values. Expired turns are closed on the next POST.
+
+The adapter sends only the owned conversation context and approved tool results
+needed for that turn. It uses `store:false`; encrypted provider continuation stays
+transient. No raw provider response/reasoning is stored. Client content, catalog
+text and tool results are treated as untrusted input. No SQL, owner selection,
+inventory writes, budgets, memory, or proactive insights are exposed as tools.
+
+Credential-free deterministic tests and a real loopback HTTP/PostgreSQL smoke:
+
+```powershell
+uv run --env-file .env pytest tests/test_assistant_validation.py tests/test_assistant_provider.py tests/test_assistant_integration.py -v
+uv run --env-file .env pytest tests/test_assistant_integration.py -k local_http -v -s
+uv run alembic upgrade head
+uv run alembic check
+```
+
+These tests inject fake authentication/model boundaries only in test-created apps;
+PostgreSQL and HTTP are real. They require the separate disposable test database
+described above and never call a live model. Tests cover exact analytics and
+inventory results, owner isolation, retries, duplicate submissions/calls, stale
+workers, and grounded response persistence. The OpenAI transport is separately
+mocked. See ADR-009 and the assistant API contract for exact lifecycle semantics.
+
+## Memory and insights configuration and verification
+
+M7 requires no additional credentials or services. Apply migration
+`0007_memory_insights` and keep `uv run python -m backend.worker` running. The
+worker now dispatches receipt, inventory and insight jobs, and schedules daily
+financial and per-lot evaluations using each owner's local calendar. `--once`
+schedules/dispatches a bounded batch; keep polling to drain larger backlogs.
+
+Memory controls: POST/GET `/api/v1/memories`, GET/PATCH/DELETE
+`/api/v1/memories/{id}`. These explicitly save/update/delete typed user statements;
+they never harvest transcripts. PATCH replaces the statement and optional fields
+using `expected_version`; DELETE requires `?expected_version=...`. Search and
+assistant recall exclude expired/deleted memories. Topic relevance supports food,
+spending, inventory, shopping and goals alongside lexical matching.
+
+Insight controls: GET `/api/v1/insights`, GET/PATCH `/api/v1/insights/{id}`. PATCH
+marks READ or DISMISSED with an expected version. Generation runs only in the
+worker, using existing analytics/inventory services and deterministic explanation
+templates. Default reads return active/read unexpired observations. The assistant
+can read their structured sources; its original tools still supply current data.
+No live OpenAI/Gemini call is needed for these subsystems or their tests.
+
+Insight retry state is independent of inventory delivery on the outbox row. After
+diagnosing an exhausted/permanent failure, requeue its event ID explicitly:
+
+```powershell
+uv run python -m backend.worker --retry-insight <outbox-event-uuid> --once
+```
+
+Verification uses the same disposable PostgreSQL database as the existing suite:
+
+```powershell
+uv run --env-file .env pytest tests/test_memory_validation.py tests/test_memory_integration.py tests/test_insights_integration.py tests/test_memory_insights_migration.py tests/test_memory_insights_http.py -v
+uv run --env-file .env pytest tests/test_memory_insights_http.py -v -s
+uv run --env-file .env pytest
+uv run ruff check backend tests database
+uv run ruff format --check backend tests database
+uv run mypy backend
+uv run alembic upgrade head
+uv run alembic check
+```
+
+The HTTP smoke verifies explicit memory creation/deletion, relevant assistant
+recall, exact inventory evidence, insight dismissal and owner isolation against
+real PostgreSQL. Authentication and model boundaries are test injections only.
+Rule thresholds, evidence limits, snapshots and deferrals are recorded in ADR-010
+and `docs/workflows/memory-insights.md`.

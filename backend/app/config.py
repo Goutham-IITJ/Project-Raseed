@@ -26,6 +26,14 @@ class Settings(BaseSettings):
     receipt_max_attempts: int = Field(default=3, ge=1, le=10)
     receipt_retry_seconds: int = Field(default=5, ge=1, le=300)
     worker_poll_seconds: float = Field(default=2, gt=0, le=60)
+    openai_api_key: SecretStr = SecretStr("")
+    assistant_model: str = Field(default="", max_length=100)
+    assistant_request_timeout_seconds: float = Field(default=20, gt=0, le=60)
+    assistant_turn_timeout_seconds: float = Field(default=120, gt=0, le=180)
+    assistant_max_rounds: int = Field(default=6, ge=1, le=10)
+    assistant_max_tool_calls: int = Field(default=8, ge=1, le=8)
+    assistant_max_attempts: int = Field(default=2, ge=1, le=3)
+    assistant_max_output_tokens: int = Field(default=4096, ge=256, le=16384)
 
     @field_validator("database_url")
     @classmethod

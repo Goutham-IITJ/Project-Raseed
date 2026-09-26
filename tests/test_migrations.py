@@ -1,11 +1,18 @@
+from uuid import uuid4
+
 import pytest
 from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
+from assistant_fixtures import NOW, ScriptedModel, call, calls, final
 from conftest import migration_config
 from sqlalchemy import func, inspect, select, text
+from sqlalchemy.exc import IntegrityError
 from test_purchase_validation import purchase_data, receipt_data
 
+from backend.app.assistant.models import Message, ToolExecution
+from backend.app.assistant.schemas import ConversationCreate, MessageCreate
+from backend.app.assistant.service import AssistantService
 from backend.app.database import Base, make_session_factory
 from backend.app.identity.context import VerifiedIdentity
 from backend.app.identity.models import User, UserPreference
@@ -20,6 +27,18 @@ from backend.app.purchases.schemas import CategoryCreate, PurchaseCreate, Receip
 from backend.app.purchases.service import PurchaseService
 
 pytestmark = pytest.mark.integration
+
+
+def canonical_row_sql(table):
+    # Lower-milestone checks compare their original data, excluding M7 delivery metadata.
+    projection = "to_jsonb(record)"
+    if table == "outbox_events":
+        projection += (
+            " - ARRAY['insight_id', 'evaluation_lot_id', 'schedule_key', 'insight_processed_at', "
+            "'insight_available_at', 'insight_attempt_count', "
+            "'insight_failure_code', 'insight_failed_at']"
+        )
+    return text(f"SELECT ({projection})::text FROM {table} record ORDER BY id")
 
 
 def test_migration_from_empty_database_and_model_agreement(migrated_engine, database_url):
@@ -44,6 +63,11 @@ def test_migration_from_empty_database_and_model_agreement(migrated_engine, data
         "inventory_items",
         "inventory_lots",
         "inventory_events",
+        "conversations",
+        "messages",
+        "tool_executions",
+        "memories",
+        "insights",
     }
     assert any(
         constraint["column_names"] == ["firebase_uid"]
@@ -194,14 +218,7 @@ def test_analytics_index_roundtrip_preserves_all_canonical_and_inventory_data(
             "outbox_events",
         )
         with database.connect() as connection:
-            return {
-                table: list(
-                    connection.scalars(
-                        text(f"SELECT row_to_json(record)::text FROM {table} record ORDER BY id")
-                    )
-                )
-                for table in tables
-            }
+            return {table: list(connection.scalars(canonical_row_sql(table))) for table in tables}
 
     before = records()
     config = migration_config(database_url)
@@ -221,3 +238,64 @@ def test_analytics_index_roundtrip_preserves_all_canonical_and_inventory_data(
     assert "ix_purchases_user_currency_purchased" in {
         row["name"] for row in inspect(database).get_indexes("purchases")
     }
+
+
+def test_assistant_roundtrip_preserves_canonical_data_and_enforces_execution_state(
+    database, database_url
+):
+    factory = make_session_factory(database)
+    with factory() as session:
+        owner = provision_user(session, VerifiedIdentity("m6-migration-owner"))
+        service = PurchaseService(session, owner)
+        receipt = service.create_receipt(ReceiptCreate.model_validate(receipt_data()))
+        purchase = service.create_purchase(
+            PurchaseCreate.model_validate(purchase_data(receipt_id=receipt.id))
+        )
+    assistant = AssistantService(
+        factory,
+        owner,
+        ScriptedModel(
+            calls(call()), final("Recorded evidence is available.", sources=["call_summary"])
+        ),
+        clock=lambda: NOW,
+    )
+    conversation = assistant.create_conversation(ConversationCreate(title="Migration fixture"))
+    turn = assistant.submit_message(
+        conversation.id, MessageCreate(content="Show spending", idempotency_key=uuid4())
+    )
+    for invalid in ({"elapsed_ms": None}, {"result": {}}, {"result": {"status": "FAILED"}}):
+        with factory() as session, pytest.raises(IntegrityError), session.begin():
+            execution = session.get(ToolExecution, turn.assistant_message.tool_executions[0].id)
+            for key, value in invalid.items():
+                setattr(execution, key, value)
+            session.flush()
+    with factory() as session, pytest.raises(IntegrityError), session.begin():
+        session.get(Message, turn.assistant_message.id).evidence = None
+        session.flush()
+
+    def canonical_rows():
+        tables = (
+            "users",
+            "user_preferences",
+            "receipts",
+            "purchases",
+            "merchants",
+            "outbox_events",
+        )
+        with database.connect() as connection:
+            return {table: list(connection.scalars(canonical_row_sql(table))) for table in tables}
+
+    before = canonical_rows()
+    config = migration_config(database_url)
+    command.downgrade(config, "0005_financial_analytics")
+    assert not {"conversations", "messages", "tool_executions"} & set(
+        inspect(database).get_table_names()
+    )
+    assert canonical_rows() == before
+    command.upgrade(config, "head")
+    assert canonical_rows() == before
+    with factory() as session:
+        assert session.get(Purchase, purchase.id).grand_total == purchase.grand_total
+        assert session.scalar(select(func.count()).select_from(Message)) == 0
+    with database.connect() as connection:
+        assert compare_metadata(MigrationContext.configure(connection), Base.metadata) == []

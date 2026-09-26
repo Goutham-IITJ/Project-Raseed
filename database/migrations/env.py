@@ -1,9 +1,12 @@
 from alembic import context
 
+from backend.app.assistant import models as assistant_models  # noqa: F401
 from backend.app.config import Settings
 from backend.app.database import Base, make_engine
 from backend.app.identity import models  # noqa: F401
+from backend.app.insights import models as insight_models  # noqa: F401
 from backend.app.inventory import models as inventory_models  # noqa: F401
+from backend.app.memory import models as memory_models  # noqa: F401
 from backend.app.purchases import models as purchase_models  # noqa: F401
 
 target_metadata = Base.metadata

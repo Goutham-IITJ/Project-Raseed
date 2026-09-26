@@ -58,10 +58,19 @@ Budget persistence and assistant/insight integrations remain deferred.
 - financial and inventory tools
 - grounded responses
 
+Concrete persistence, idempotency, provider, grounding and API contracts:
+[ADR-009](../decisions/ADR-009-assistant-tools.md). Read tools reuse the completed
+financial/purchase/inventory services. No M7 memory or proactive insights are added.
+
 ## Milestone 7 — Insights and memory
 - insight generation
 - persistent memory
 - user controls
+
+Implemented contracts, deterministic rule thresholds, assistant relevance and
+independent outbox delivery are specified in
+[ADR-010](../decisions/ADR-010-memory-insights.md). Only explicit user-confirmed
+memory is saved. Financial/inventory insights run in the existing separate worker.
 
 ## Milestone 8 — Google Wallet
 - class/object mapping
