@@ -1,4 +1,4 @@
-# Raseed API v1 — identity, purchases, receipts, and inventory
+# Raseed API v1 — identity, purchases, receipts, inventory, and analytics
 
 ## Transport, versioning, authentication
 
@@ -10,7 +10,7 @@ The Firebase Admin SDK verifies tokens; uid resolves to an internal UUID through
 concurrency-safe first-request provisioning. No Raseed session cookie is issued.
 
 Ownership comes exclusively from verified server context. Identity endpoints accept
-no query parameters. Collection endpoints accept only documented pagination.
+no query parameters. Collection endpoints accept only documented filters and pagination.
 No endpoint accepts user ID, Firebase uid, or email as an ownership selector.
 Unknown body fields and query parameters are rejected with 422. Unauthenticated
 requests are rejected before provisioning or reading user data.
@@ -149,6 +149,8 @@ Missing or cross-user UUID: 404.
 
 Same pagination envelope and bounds; ordered by purchased_at and UUID descending.
 Returns only the current user's purchases, including nested line_items and payments.
+Milestone 5 adds the typed purchase-history filters documented below. Omitting
+filters retains the existing all-time behavior, ordering, and response shape.
 
 ### GET /api/v1/purchases/{id}
 
@@ -255,3 +257,123 @@ Keys are unique across one owner's inventory commands.
 
 No direct quantity PATCH or history deletion endpoint exists. Every correction
 is retained and attributable. No live AI credentials are needed.
+
+## Financial analytics and purchase history (Milestone 5)
+
+All reads retain verified Firebase ownership, `{"data": ...}`, no-store responses,
+and rejection of unknown query parameters. No query accepts an owner identifier,
+SQL, arbitrary expression, or model-generated calculation. ADR-008 records the
+financial semantics and snapshot policy. There are no analytics write routes.
+
+| GET path under /api/v1 | Response data |
+| --- | --- |
+| /analytics/spending-summary | Period, filters, and summary per currency |
+| /analytics/spending-by-category | Period, filters, basis, and category groups |
+| /analytics/spending-by-merchant | Period, filters, and merchant groups |
+| /analytics/period-comparison | Current/comparison periods and changes per currency |
+| /purchases | Existing purchase list, with optional history filters |
+
+### Shared period and purchase filters
+
+- `start_date`, `end_date`: strict YYYY-MM-DD, supplied together, start < end.
+  The start is inclusive and the end exclusive in the owner's current timezone.
+- `period`: one of today, yesterday, this_week, last_week, this_month, last_month,
+  this_year, last_year. Mutually exclusive with explicit dates. Weeks start Monday.
+  A named period covers the whole local calendar period, including the remainder
+  of a current week/month/year. Analytics defaults to this_month. Purchase history
+  remains all-time if neither a period nor explicit dates are supplied.
+- `currency`: optional uppercase registered currency code. Omitted means all
+  currencies separately; the user's preferred currency does not hide other data.
+- `merchant_id`: canonical merchant UUID.
+- `category_id`: direct **purchase** category UUID; no descendant expansion.
+- `line_item_category_id`, `product_id`: canonical UUIDs. A qualifying purchase
+  must contain a matching line; when both are supplied they must match the same
+  line. History returns each matching purchase once, with all its children.
+- `purchase_type`: exact canonical label, nonblank, max 40 characters.
+- `payment_status`: UNKNOWN, UNPAID, PARTIALLY_PAID, or PAID.
+
+Filters combine with AND. Catalog IDs without qualifying owned purchases produce
+empty results, identically for missing IDs and IDs used only by another owner.
+No free-text search, timezone override, or user selector is supported.
+
+Analytics data includes `provenance: "DERIVED"`, the validated `filters` object
+(omitted filters are null), and `period` with start_date, end_date, timezone,
+start_at and end_at. UTC boundaries are ISO 8601 timestamps. DST days may span
+23/25 hours; ambiguous midnight uses its earliest occurrence. Nonexistent midnight,
+skipped-date, or unrepresentable UTC boundaries return 422. Results use purchased_at,
+independently of record creation time or database session timezone.
+
+```text
+GET /api/v1/analytics/spending-summary?start_date=2026-09-01&end_date=2026-10-01
+GET /api/v1/analytics/spending-by-category?period=last_month&currency=INR&basis=line_item
+GET /api/v1/purchases?period=last_month&currency=INR&payment_status=PAID&limit=20
+```
+
+### Summary and financial metrics
+
+`currencies` is sorted by currency code. Each row contains currency, purchase_count,
+total_spent, average_purchase, smallest_purchase, largest_purchase, first_purchased_at,
+last_purchased_at, payment_count, recorded_payment_total, and
+purchases_with_recorded_payments. Spending sums canonical Purchase.grand_total,
+regardless of payment status; it does not measure cash flow. Recorded payments sum
+Payment.amount for those purchases, independently of the payment's creation time.
+An absent instrument does not establish an unpaid balance, even for PAID purchases.
+
+Monetary values and percentages are decimal strings. Sums and differences are
+exact at canonical six-place precision, without the per-record NUMERIC(20,6) cap
+on aggregates. Averages and percentages round once to six places with HALF_EVEN.
+No currency conversion is performed. Without a currency filter an empty selection
+returns `currencies: []`; with one it returns that currency with zero totals/counts
+and null average, extrema, and first/last timestamps.
+
+### Category and merchant groups
+
+Both endpoints accept limit 1–100 (default 20), offset 0–10000 (default 0).
+They return `groups`, `limit`, `offset`, and `has_more`. Groups sort by currency
+ascending, amount descending (unknown amounts last), and canonical UUID ascending
+(null UUID last). Shares use the full filtered currency total before pagination.
+The summary and comparison endpoints do not accept pagination.
+
+Category `basis` is `purchase` (default) or `line_item`. Each group contains currency,
+category_id/name/slug, parent_id, total_amount, purchase_count, line_item_count,
+known_amount_count, unknown_amount_count, and share_of_known_total_percent.
+
+- Purchase basis groups grand_total by the direct Purchase.category_id. Line count
+  is null; known amount count equals purchase count. These totals reconcile with
+  the summary over all pages.
+- Line-item basis groups recorded line_total by direct LineItem.category_id.
+  Missing values contribute to unknown_amount_count; total_amount is null when
+  no amount is known. Purchase counts are distinct per group and can overlap
+  across groups. Line filters also restrict which lines contribute. Other filters
+  select the containing purchases. Product categories, quantity multiplication,
+  discounts and taxes are never used to invent or allocate missing amounts.
+
+Null category IDs form an unassigned group; no implicit parent roll-up occurs.
+Line totals need not equal purchase totals. Shares are null for unknown totals
+or zero denominators, and otherwise describe the known amounts only.
+
+Merchant groups contain currency, merchant_id, merchant_name, total_spent,
+purchase_count, average_purchase, first_purchased_at, last_purchased_at, and
+share_of_total_percent. Canonical UUIDs define identity even when names match;
+unassociated purchases form one null-ID/null-name group. No raw-name guessing occurs.
+
+### Period comparisons
+
+`comparison_start_date` and `comparison_end_date` optionally define a second
+half-open local date range; supply both with start < end. Otherwise the comparison
+is the preceding calendar day/week/month/year for named periods, or the preceding
+equal number of local calendar days for an explicit current range. September
+compares to August for `period=this_month`; an explicit 30-day range compares to
+the preceding 30 local dates. Different-length explicit ranges are allowed, with
+no per-day normalization. `comparison_period` returns the resolved boundaries.
+
+`currencies` contains the union of currencies in either range, sorted by code.
+Each row has currency, current_total, comparison_total, absolute_change,
+percentage_change, current_purchase_count, comparison_purchase_count, and
+purchase_count_change. Missing sides have zero totals/counts. Absolute change is
+current minus comparison. Percentage change is delta / comparison * 100, or null
+when the comparison total is zero (including zero-to-zero). The two ranges and
+preferences are read from one consistent PostgreSQL snapshot.
+
+Budget persistence, recurrence inference, assistant/tool integration, and later
+insight features remain deferred. These endpoints perform no provider calls.

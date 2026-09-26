@@ -13,6 +13,7 @@ from backend.app.ingestion.service import UploadService
 from backend.app.ingestion.storage import ObjectStorage
 from backend.app.ingestion.upload import read_upload
 from backend.app.purchases.errors import DomainError
+from backend.app.purchases.queries import PurchaseHistoryQuery
 from backend.app.purchases.schemas import (
     PageQuery,
     PurchaseListResponse,
@@ -111,7 +112,9 @@ def get_receipt(receipt_id: UUID, service: Service, no_query: NoQuery) -> Receip
 
 
 @router.get("/purchases", response_model=PurchaseListResponse)
-def list_purchases(service: Service, page: Pagination) -> PurchaseListResponse:
+def list_purchases(
+    service: Service, page: Annotated[PurchaseHistoryQuery, Query()]
+) -> PurchaseListResponse:
     return PurchaseListResponse(data=service.list_purchases(page))
 
 

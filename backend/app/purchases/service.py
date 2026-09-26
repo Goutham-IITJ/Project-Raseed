@@ -1,12 +1,15 @@
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.app.identity.context import CurrentUser
+from backend.app.identity.repositories import PreferencesRepository
 from backend.app.purchases.errors import Conflict, DomainError, InvalidReference
+from backend.app.purchases.queries import PurchaseHistoryQuery, resolve_period, utc_now
 from backend.app.purchases.repositories import (
     CatalogRepository,
     ExtractionRunRepository,
@@ -34,8 +37,16 @@ from backend.app.purchases.schemas import (
 class PurchaseService:
     """Transaction boundary for validated canonical records; no provider or file I/O."""
 
-    def __init__(self, session: Session, current_user: CurrentUser) -> None:
+    def __init__(
+        self,
+        session: Session,
+        current_user: CurrentUser,
+        *,
+        clock: Callable[[], datetime] = utc_now,
+    ) -> None:
         self._session = session
+        self._clock = clock
+        self._preferences = PreferencesRepository(session, current_user)
         self._receipts = ReceiptRepository(session, current_user)
         self._runs = ExtractionRunRepository(session, current_user)
         self._catalog = CatalogRepository(session, current_user)
@@ -114,7 +125,12 @@ class PurchaseService:
             return PurchaseView.model_validate(self._purchases.get(purchase_id))
 
     def list_purchases(self, page: PageQuery) -> list[PurchaseView]:
+        query = PurchaseHistoryQuery.model_validate(page.model_dump())
         with self._transaction():
+            period = None
+            if query.period is not None or query.start_date is not None:
+                period = resolve_period(query, self._preferences.get().timezone, self._clock())
             return [
-                PurchaseView.model_validate(purchase) for purchase in self._purchases.list(page)
+                PurchaseView.model_validate(purchase)
+                for purchase in self._purchases.list(query, filters=query, period=period)
             ]

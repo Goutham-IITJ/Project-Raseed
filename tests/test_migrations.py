@@ -146,3 +146,78 @@ def test_inventory_roundtrip_preserves_purchase_and_requeues_delivery(database, 
         assert session.get(Category, category.id).inventory_eligible is None
     with database.connect() as connection:
         assert connection.scalar(text("SELECT count(*) FROM inventory_events")) == 0
+
+
+def test_analytics_index_roundtrip_preserves_all_canonical_and_inventory_data(
+    database, database_url
+):
+    factory = make_session_factory(database)
+    with factory() as session:
+        owner = provision_user(session, VerifiedIdentity("m5-migration-owner"))
+        service = PurchaseService(session, owner)
+        category = service.create_category(
+            CategoryCreate(name="Fixture", slug="fixture", inventory_eligible=True)
+        )
+        service.create_purchase(
+            PurchaseCreate.model_validate(
+                purchase_data(
+                    category_id=category.id,
+                    payment_status="PAID",
+                    payments=[{"method": "CASH", "amount": "0.30", "currency": "INR"}],
+                    line_items=[
+                        {
+                            "raw_name": "Fixture stock",
+                            "category_id": category.id,
+                            "quantity": "2",
+                            "unit": "each",
+                            "line_total": "0.30",
+                        }
+                    ],
+                )
+            )
+        )
+    dispatcher = InventoryDispatcher(factory, LocalInventoryTaskQueue(InventoryProcessor(factory)))
+    assert dispatcher.dispatch_once() == 1
+
+    def records():
+        # Fixed test table names; the fixture has already verified a disposable database.
+        tables = (
+            "users",
+            "user_preferences",
+            "categories",
+            "purchases",
+            "line_items",
+            "payments",
+            "inventory_items",
+            "inventory_lots",
+            "inventory_events",
+            "outbox_events",
+        )
+        with database.connect() as connection:
+            return {
+                table: list(
+                    connection.scalars(
+                        text(f"SELECT row_to_json(record)::text FROM {table} record ORDER BY id")
+                    )
+                )
+                for table in tables
+            }
+
+    before = records()
+    config = migration_config(database_url)
+    command.downgrade(config, "0004_inventory")
+    assert records() == before
+    assert "ix_line_items_product" in {
+        row["name"] for row in inspect(database).get_indexes("line_items")
+    }
+    assert "ix_purchases_user_currency_purchased" not in {
+        row["name"] for row in inspect(database).get_indexes("purchases")
+    }
+    command.upgrade(config, "head")
+    assert records() == before
+    assert "ix_line_items_product_purchase" in {
+        row["name"] for row in inspect(database).get_indexes("line_items")
+    }
+    assert "ix_purchases_user_currency_purchased" in {
+        row["name"] for row in inspect(database).get_indexes("purchases")
+    }

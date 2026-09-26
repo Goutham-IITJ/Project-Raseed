@@ -84,3 +84,20 @@ link check retains M3 kinds and adds INVENTORY_CHANGED.
 Downgrade discards inventory history/flags and resets M4-handled PURCHASE_CREATED
 events to pending for later reconstruction. Canonical receipts/purchases survive.
 Round trips are tested only on the disposable database. See ADR-007.
+
+## Milestone 5 indexes and reads
+
+Revision `0005_financial_analytics` changes indexes only. Purchases gain composite
+indexes on (user_id, currency, purchased_at, id), (user_id, merchant_id, purchased_at,
+id), and (user_id, category_id, purchased_at, id). Existing owner/time ordering
+remains supported. Line-item product/category indexes gain purchase_id as a second
+column for filtered history EXISTS queries, retaining their leading-key access paths.
+
+Analytics aggregates canonical NUMERIC amounts within each currency and never
+casts to floating point or to a bounded per-record numeric type. Child payments
+are aggregated before joining purchases. Direct range predicates use UTC instants
+resolved from the owner's local dates. Read-only REPEATABLE READ transactions give
+multi-query analytics consistent preferences and purchase snapshots; existing
+write transactions retain READ COMMITTED. No materialized financial table, new
+event consumer, or budget persistence is added. Index-only downgrade preserves
+all canonical and inventory records. See ADR-008.

@@ -49,6 +49,9 @@
 - merchant analysis
 - period comparisons
 
+Concrete read contracts and financial semantics: [ADR-008](../decisions/ADR-008-financial-analytics.md).
+Budget persistence and assistant/insight integrations remain deferred.
+
 ## Milestone 6 — Assistant
 - conversations/messages
 - tool layer

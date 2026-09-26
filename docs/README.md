@@ -16,7 +16,7 @@ This directory is the authoritative product and architecture specification for R
 - Core workflows: v1.0
 - System architecture: v1.0 draft
 - Database architecture: v1.0 draft
-- API contract: [v1 identity and canonical purchase endpoints](api/api-contract.md)
+- API contract: [implemented v1 endpoints](api/api-contract.md)
 - AI/worker architecture: v1.0 draft
 - Security architecture: v1.0 draft
 
@@ -41,3 +41,10 @@ stock corrections and expiry provenance. See [inventory](workflows/inventory.md)
 [ADR-007](decisions/ADR-007-inventory.md), and the inventory API contract.
 Completed checks and files are listed in the
 [Milestone 4 validation checkpoint](implementation/milestone-4-validation.md).
+
+Milestone 5 adds deterministic financial analytics and filtered purchase history.
+Calculation, currency, date, and API clarifications are in
+[ADR-008](decisions/ADR-008-financial-analytics.md) and the financial-query workflow.
+Budgets and all assistant/insight integrations remain deferred. Validation and
+the changed-file inventory are in the
+[Milestone 5 checkpoint](implementation/milestone-5-validation.md).

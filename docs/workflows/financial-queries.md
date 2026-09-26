@@ -39,3 +39,24 @@ User question → Assistant API → intent/query understanding → approved tool
 - Numerical answers come from structured tool results.
 - Recommendations should cite the evidence used when useful.
 - Destructive mutations require confirmation when appropriate.
+
+## Milestone 5 deterministic foundation
+
+AnalyticsService implements spending summaries, direct purchase/line-category
+breakdowns, canonical merchant analysis, and period comparisons. PurchaseService
+provides filtered history and existing owned purchase detail. The authenticated
+API exposes these structured results before the Milestone 6 assistant exists;
+no LLM, tool gateway, conversation, insight, or memory integration is introduced.
+
+Results are marked DERIVED, identify their local dates/UTC boundaries and filters,
+and keep currencies independent. Counts, exact totals, rounded averages/percentages,
+payment-evidence coverage, and unknown line-total coverage can ground later tools.
+Date phrases are represented by an allowlisted deterministic period selector,
+including last_month. The model never determines amounts or ownership.
+
+See [ADR-008](../decisions/ADR-008-financial-analytics.md) and the
+[API contract](../api/api-contract.md) for category bases, payment meaning,
+rounding, comparison rules, filters, pagination, and timezone boundaries.
+Recurring spending has no approved M5 detection contract; it and budget persistence
+remain deferred. Future tools should delegate to these services instead of adding
+independent financial calculations or SQL access.

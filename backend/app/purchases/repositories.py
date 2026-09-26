@@ -4,6 +4,7 @@ from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.sql.elements import ColumnElement
 
 from backend.app.identity.context import CurrentUser
 from backend.app.purchases.errors import DomainError, NotFound
@@ -18,6 +19,7 @@ from backend.app.purchases.models import (
     Purchase,
     Receipt,
 )
+from backend.app.purchases.queries import PurchaseFilters, ResolvedPeriod
 from backend.app.purchases.schemas import (
     CategoryCreate,
     ExtractionRunCreate,
@@ -27,6 +29,47 @@ from backend.app.purchases.schemas import (
     PurchaseCreate,
     ReceiptCreate,
 )
+
+
+def matching_line_conditions(filters: PurchaseFilters) -> list[ColumnElement[bool]]:
+    conditions: list[ColumnElement[bool]] = []
+    if filters.product_id is not None:
+        conditions.append(LineItem.product_id == filters.product_id)
+    if filters.line_item_category_id is not None:
+        conditions.append(LineItem.category_id == filters.line_item_category_id)
+    return conditions
+
+
+def purchase_conditions(
+    current_user: CurrentUser,
+    filters: PurchaseFilters,
+    period: ResolvedPeriod | None,
+) -> list[ColumnElement[bool]]:
+    """Shared owned scope for history and analytics; values are always bound parameters."""
+    conditions = [Purchase.user_id == current_user.id]
+    if period is not None:
+        conditions.extend(
+            [Purchase.purchased_at >= period.start_at, Purchase.purchased_at < period.end_at]
+        )
+    if filters.currency is not None:
+        conditions.append(Purchase.currency == filters.currency)
+    if filters.merchant_id is not None:
+        conditions.append(Purchase.merchant_id == filters.merchant_id)
+    if filters.category_id is not None:
+        conditions.append(Purchase.category_id == filters.category_id)
+    if filters.purchase_type is not None:
+        conditions.append(Purchase.purchase_type == filters.purchase_type)
+    if filters.payment_status is not None:
+        conditions.append(Purchase.payment_status == filters.payment_status)
+    line_conditions = matching_line_conditions(filters)
+    if line_conditions:
+        conditions.append(
+            select(LineItem.id)
+            .where(LineItem.purchase_id == Purchase.id, *line_conditions)
+            .correlate(Purchase)
+            .exists()
+        )
+    return conditions
 
 
 class OwnedRepository:
@@ -170,11 +213,19 @@ class PurchaseRepository(OwnedRepository):
             raise NotFound
         return purchase
 
-    def list(self, page: PageQuery) -> list[Purchase]:
+    def list(
+        self,
+        page: PageQuery,
+        *,
+        filters: PurchaseFilters | None = None,
+        period: ResolvedPeriod | None = None,
+    ) -> list[Purchase]:
         return list(
             self._session.scalars(
                 select(Purchase)
-                .where(Purchase.user_id == self._current_user.id)
+                .where(
+                    *purchase_conditions(self._current_user, filters or PurchaseFilters(), period)
+                )
                 .options(selectinload(Purchase.line_items), selectinload(Purchase.payments))
                 .order_by(Purchase.purchased_at.desc(), Purchase.id.desc())
                 .limit(page.limit)

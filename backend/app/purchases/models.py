@@ -229,6 +229,13 @@ class Purchase(Timestamps, Base):
             name="totals_reconcile",
         ),
         Index("ix_purchases_user_purchased", "user_id", "purchased_at", "id"),
+        Index("ix_purchases_user_currency_purchased", "user_id", "currency", "purchased_at", "id"),
+        Index(
+            "ix_purchases_user_merchant_purchased", "user_id", "merchant_id", "purchased_at", "id"
+        ),
+        Index(
+            "ix_purchases_user_category_purchased", "user_id", "category_id", "purchased_at", "id"
+        ),
         Index("ix_purchases_merchant", "merchant_id"),
         Index("ix_purchases_category", "category_id"),
     )
@@ -276,8 +283,8 @@ class LineItem(Timestamps, Base):
         amount_check("unit_price"),
         amount_check("line_total"),
         Index("ix_line_items_purchase", "purchase_id"),
-        Index("ix_line_items_product", "product_id"),
-        Index("ix_line_items_category", "category_id"),
+        Index("ix_line_items_product_purchase", "product_id", "purchase_id"),
+        Index("ix_line_items_category_purchase", "category_id", "purchase_id"),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)

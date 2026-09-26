@@ -107,10 +107,12 @@ Preferences are canonical key/value rows with a synchronized user-profile
 projection. Defaults are INR, Asia/Kolkata, en-IN. Tokens, receipt contents, and
 database parameters are not included in application error responses/logs.
 
-Milestones 0–4 implement identity, canonical purchases, private receipt uploads,
+Milestones 0–5 implement identity, canonical purchases, private receipt uploads,
 and asynchronous extraction. Canonical purchase children, receipt success and
 PURCHASE_CREATED commit atomically. Inventory consumes that event and exposes
-owned stock/lot/history and correction APIs. Later integrations remain deferred.
+owned stock/lot/history and correction APIs. Deterministic analytics reads canonical
+purchases directly and exposes filtered history, summaries, category/merchant
+breakdowns, and comparisons. Later integrations remain deferred.
 The existing frontend remains the identity foundation;
 upload is available through the API and `/docs`.
 
@@ -203,3 +205,26 @@ uv run --env-file .env pytest tests/test_inventory_integration.py -k local_http 
 The smoke fixture configures an eligible test category explicitly. It does not
 seed the development catalog or contact Gemini. Receipt expiry remains UNKNOWN
 until explicit evidence exists; no expiry guesses or automatic depletion occur.
+
+## Financial analytics verification
+
+The analytics endpoints are available through `/docs` and require the same bearer
+authentication as purchase reads. No worker, model key, or cloud account is needed.
+Omitting currency returns separate groups for each currency; omitting a period
+defaults analytics to the owner's current local calendar month. Purchase history
+still defaults to all-time. Dates use an inclusive start and exclusive end.
+
+```powershell
+uv run --env-file .env pytest tests/test_analytics_validation.py tests/test_analytics_integration.py -v
+uv run --env-file .env pytest tests/test_analytics_integration.py -k local_http -v -s
+uv run alembic upgrade head
+uv run alembic check
+```
+
+The HTTP check uses canonical synthetic purchases in the disposable `raseed_test`
+database, test-only authentication, and a real loopback HTTP server. It exercises
+all four analytics endpoints and filtered purchase history. Tests also cover
+mixed currencies, unknown line totals, split payments, DST boundaries, snapshot
+consistency, ownership, and index preservation across migration round trips.
+See the API contract and ADR-008 for precise metric/rounding semantics. Budget
+persistence, recurring-pattern inference, and Milestone 6 tools remain deferred.
