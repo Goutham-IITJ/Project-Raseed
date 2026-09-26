@@ -4,6 +4,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -168,6 +169,7 @@ class Category(Timestamps, Base):
     parent: Mapped["Category | None"] = relationship(
         remote_side="Category.id", back_populates="children"
     )
+    inventory_eligible: Mapped[bool | None] = mapped_column(Boolean)
     children: Mapped[list["Category"]] = relationship(
         back_populates="parent", passive_deletes="all"
     )
@@ -188,6 +190,7 @@ class Product(Timestamps, Base):
         ForeignKey("categories.id", ondelete="RESTRICT")
     )
     unit_type: Mapped[str | None] = mapped_column(String(40))
+    inventory_eligible: Mapped[bool | None] = mapped_column(Boolean)
     # SQLAlchemy reserves `metadata`; the actual PostgreSQL column keeps the domain name.
     product_metadata: Mapped[dict[str, object] | None] = mapped_column(
         "metadata", JSONB(none_as_null=True)
@@ -267,6 +270,7 @@ class Purchase(Timestamps, Base):
 class LineItem(Timestamps, Base):
     __tablename__ = "line_items"
     __table_args__ = (
+        UniqueConstraint("id", "purchase_id", name="uq_line_items_id_purchase"),
         CheckConstraint("length(trim(raw_name)) > 0", name="raw_name_nonempty"),
         amount_check("quantity", positive=True),
         amount_check("unit_price"),
@@ -319,6 +323,14 @@ class OutboxEvent(Base):
     __tablename__ = "outbox_events"
     __table_args__ = (
         ForeignKeyConstraint(
+            ["inventory_event_id", "user_id"],
+            ["inventory_events.id", "inventory_events.user_id"],
+            name="fk_outbox_events_inventory_owner",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("inventory_event_id", name="uq_outbox_events_inventory_event"),
+        CheckConstraint("attempt_count >= 0", name="attempt_count_nonnegative"),
+        ForeignKeyConstraint(
             ["purchase_id", "user_id"],
             ["purchases.id", "purchases.user_id"],
             name="fk_outbox_events_purchase_owner",
@@ -334,15 +346,25 @@ class OutboxEvent(Base):
         UniqueConstraint("receipt_id", "event_type", name="uq_outbox_events_receipt_type"),
         CheckConstraint(
             "(event_type = 'PURCHASE_CREATED' AND purchase_id IS NOT NULL "
-            "AND receipt_id IS NULL) "
+            "AND receipt_id IS NULL AND inventory_event_id IS NULL) "
             "OR (event_type = 'RECEIPT_UPLOADED' AND receipt_id IS NOT NULL "
-            "AND purchase_id IS NULL)",
+            "AND purchase_id IS NULL AND inventory_event_id IS NULL) "
+            "OR (event_type = 'INVENTORY_CHANGED' AND inventory_event_id IS NOT NULL "
+            "AND purchase_id IS NULL AND receipt_id IS NULL)",
             name="event_type_supported",
         ),
         Index(
             "ix_outbox_events_pending", "created_at", postgresql_where=text("published_at IS NULL")
         ),
         Index("ix_outbox_events_user", "user_id"),
+        Index(
+            "ix_outbox_events_inventory_ready",
+            "available_at",
+            "id",
+            postgresql_where=text(
+                "published_at IS NULL AND failed_at IS NULL AND event_type = 'PURCHASE_CREATED'"
+            ),
+        ),
         Index(
             "ix_outbox_events_available",
             "available_at",
@@ -355,6 +377,10 @@ class OutboxEvent(Base):
     user_id: Mapped[UUID] = mapped_column()
     purchase_id: Mapped[UUID | None] = mapped_column()
     receipt_id: Mapped[UUID | None] = mapped_column()
+    inventory_event_id: Mapped[UUID | None] = mapped_column()
+    attempt_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    failure_code: Mapped[str | None] = mapped_column(String(100))
+    failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     event_type: Mapped[str] = mapped_column(String(40))
     payload: Mapped[dict[str, str]] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

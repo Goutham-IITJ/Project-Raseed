@@ -107,10 +107,11 @@ Preferences are canonical key/value rows with a synchronized user-profile
 projection. Defaults are INR, Asia/Kolkata, en-IN. Tokens, receipt contents, and
 database parameters are not included in application error responses/logs.
 
-Milestones 0–3 implement identity, canonical purchases, private receipt uploads,
+Milestones 0–4 implement identity, canonical purchases, private receipt uploads,
 and asynchronous extraction. Canonical purchase children, receipt success and
-PURCHASE_CREATED commit atomically. Inventory and later integrations remain
-outside this milestone. The existing frontend remains the identity foundation;
+PURCHASE_CREATED commit atomically. Inventory consumes that event and exposes
+owned stock/lot/history and correction APIs. Later integrations remain deferred.
+The existing frontend remains the identity foundation;
 upload is available through the API and `/docs`.
 
 ## Receipt ingestion configuration
@@ -171,3 +172,34 @@ uv run python -m backend.worker.verify --send-to-gemini --file C:/receipts/sampl
 
 Live provider/account access is separate from deterministic validation. Do not
 commit keys, receipt binaries, raw provider responses, or account credentials.
+
+## Inventory worker and local verification
+
+`uv run python -m backend.worker` now polls both receipt and purchase events.
+Inventory has no provider/credential dependency. A purchase with explicitly
+eligible catalog product/category, known quantity and unit creates inventory;
+uncertain lines require user confirmation through POST /api/v1/inventory/lots.
+Catalog flags are optional typed internal catalog inputs, not model-supplied or
+public writes. No taxonomy is automatically seeded. See the inventory workflow
+and API contract for stock commands and expiry semantics.
+
+Inventory delivery failure is recorded on the PURCHASE_CREATED outbox row:
+attempt_count, failure_code, failed_at. Three attempts use 5/10-second backoff.
+After diagnosing/fixing the cause, an operator may requeue an exhausted purchase:
+
+```powershell
+uv run python -m backend.worker --retry-inventory <purchase-uuid> --once
+```
+
+The following checks use the disposable test database, fake authentication/model
+and real private local storage. The HTTP smoke uploads a receipt, processes M3,
+consumes PURCHASE_CREATED, reads inventory and records a consumption correction:
+
+```powershell
+uv run --env-file .env pytest tests/test_inventory_validation.py tests/test_inventory_integration.py -v
+uv run --env-file .env pytest tests/test_inventory_integration.py -k local_http -v -s
+```
+
+The smoke fixture configures an eligible test category explicitly. It does not
+seed the development catalog or contact Gemini. Receipt expiry remains UNKNOWN
+until explicit evidence exists; no expiry guesses or automatic depletion occur.

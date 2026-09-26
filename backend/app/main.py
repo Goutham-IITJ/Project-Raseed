@@ -12,6 +12,7 @@ from starlette.exceptions import HTTPException
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
+from backend.app.api.inventory import router as inventory_router
 from backend.app.api.purchases import router as purchase_router
 from backend.app.api.routes import router
 from backend.app.config import Settings
@@ -113,6 +114,7 @@ def create_app(
 
     application.include_router(router)
     application.include_router(purchase_router)
+    application.include_router(inventory_router)
     return application
 
 

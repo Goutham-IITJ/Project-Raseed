@@ -10,8 +10,13 @@ from backend.app.database import Base, make_session_factory
 from backend.app.identity.context import VerifiedIdentity
 from backend.app.identity.models import User, UserPreference
 from backend.app.identity.service import provision_user
+from backend.app.inventory.worker import (
+    InventoryDispatcher,
+    InventoryProcessor,
+    LocalInventoryTaskQueue,
+)
 from backend.app.purchases.models import Category, OutboxEvent, Purchase, Receipt
-from backend.app.purchases.schemas import PurchaseCreate, ReceiptCreate
+from backend.app.purchases.schemas import CategoryCreate, PurchaseCreate, ReceiptCreate
 from backend.app.purchases.service import PurchaseService
 
 pytestmark = pytest.mark.integration
@@ -36,6 +41,9 @@ def test_migration_from_empty_database_and_model_agreement(migrated_engine, data
         "line_items",
         "payments",
         "outbox_events",
+        "inventory_items",
+        "inventory_lots",
+        "inventory_events",
     }
     assert any(
         constraint["column_names"] == ["firebase_uid"]
@@ -94,3 +102,47 @@ def test_ingestion_upgrade_preserves_milestone_two_canonical_data(database, data
         assert session.get(Receipt, receipt.id).lease_token is None
         event = session.scalars(select(OutboxEvent)).one()
         assert event.purchase_id == purchase.id and event.receipt_id is None
+
+
+def test_inventory_roundtrip_preserves_purchase_and_requeues_delivery(database, database_url):
+    factory = make_session_factory(database)
+    with factory() as session:
+        owner = provision_user(session, VerifiedIdentity("m4-migration-owner"))
+        service = PurchaseService(session, owner)
+        category = service.create_category(
+            CategoryCreate(
+                name="Fixture",
+                slug="fixture",
+                inventory_eligible=True,
+            )
+        )
+        purchase = service.create_purchase(
+            PurchaseCreate.model_validate(
+                purchase_data(
+                    line_items=[
+                        {
+                            "raw_name": "Stock",
+                            "quantity": "2",
+                            "unit": "each",
+                            "category_id": category.id,
+                        }
+                    ],
+                )
+            )
+        )
+    dispatcher = InventoryDispatcher(factory, LocalInventoryTaskQueue(InventoryProcessor(factory)))
+    assert dispatcher.dispatch_once() == 1
+    with database.connect() as connection:
+        assert connection.scalar(text("SELECT count(*) FROM inventory_events")) == 1
+    config = migration_config(database_url)
+    command.downgrade(config, "0003_receipt_ingestion")
+    with database.connect() as connection:
+        assert connection.scalar(text("SELECT count(*) FROM purchases")) == 1
+        assert connection.scalar(text("SELECT count(*) FROM outbox_events")) == 1
+        assert connection.scalar(text("SELECT published_at FROM outbox_events")) is None
+    command.upgrade(config, "head")
+    with factory() as session:
+        assert session.get(Purchase, purchase.id).grand_total == purchase.grand_total
+        assert session.get(Category, category.id).inventory_eligible is None
+    with database.connect() as connection:
+        assert connection.scalar(text("SELECT count(*) FROM inventory_events")) == 0

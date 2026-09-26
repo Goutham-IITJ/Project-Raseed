@@ -37,7 +37,7 @@ PENDING_UPLOAD → UPLOADED → PROCESSING → EXTRACTED → VALIDATING → NORM
 The compatible JSON metadata API creates PENDING_UPLOAD only. Multipart uploads
 verify and store the original, then commit UPLOADED and RECEIPT_UPLOADED. The
 separate worker processes that event. Canonical success commits PURCHASE_CREATED
-to the outbox; downstream purchase-event consumers remain deferred.
+to the outbox; Milestone 4 consumes it for inventory.
 
 Failure or unresolved ambiguity can lead to NEEDS_REVIEW or FAILED.
 
@@ -143,7 +143,8 @@ owner from the stored event/receipt; neither a client nor model chooses ownershi
 The final transaction includes catalog normalization, Purchase, LineItems,
 Payments, PURCHASE_CREATED, Receipt.PROCESSED, ExtractionRun.SUCCEEDED and local
 upload-event acknowledgement. Rollback removes all of those canonical writes.
-PURCHASE_CREATED remains pending for later feature consumers.
+Milestone 4 consumes PURCHASE_CREATED and emits INVENTORY_CHANGED. Further feature
+consumers remain deferred; inventory failure never reverses canonical success.
 
 Uniqueness on (user, content hash), receipt-linked purchase, and receipt/event
 protects duplicates. Workers acquire random lease tokens with expirations and
@@ -165,4 +166,5 @@ for deterministic smoke checks and explicit live-provider verification.
 GCS is implemented, but live GCS/Gemini checks require user credentials. Cloud
 Tasks/HTTP delivery and service authentication are not deployed in this milestone;
 a later adapter can deliver the same typed task. No public file route, correction
-UI, inventory consumer, or later feature is implemented.
+UI or later feature is implemented by M3. M4 inventory processing is documented
+separately in [the inventory workflow](inventory.md).

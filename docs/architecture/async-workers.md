@@ -48,8 +48,19 @@ ReceiptProcessor. It never runs inside the upload request. Local delivery is
 acknowledged in PostgreSQL on terminal processing; crashes leave pending events
 and expiring receipt leases. Retryable failures use persisted exponential backoff.
 The worker derives identity from the event and receipt, and final writes verify
-the current lease token. PURCHASE_CREATED remains pending for later consumers.
+the current lease token. Milestone 4 consumes PURCHASE_CREATED for inventory.
 
 Cloud Tasks/HTTP deployment remains a later adapter for the same task contract;
 there is no publicly exposed or unauthenticated worker endpoint. See ADR-006 and
 the receipt-ingestion workflow for the implemented lease/retry rules.
+
+## Milestone 4 implementation
+
+The same worker process dispatches PurchaseTask through InventoryTaskQueue and
+LocalInventoryTaskQueue. InventoryProcessor locks the purchase event and owner
+and atomically commits lots, inventory events, INVENTORY_CHANGED entries and
+local acknowledgement. It makes no provider calls. Inventory failure does not
+roll back purchase success. Bounded retries/manual requeue use outbox delivery
+fields; receipt leases are unchanged. Inventory is the sole purchase subscriber
+in M4; INVENTORY_CHANGED remains pending. Later multiple subscribers require an
+explicit fan-out contract. See ADR-007 and the inventory workflow.

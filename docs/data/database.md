@@ -61,3 +61,26 @@ or canonical monetary changes are introduced. See ADR-006 for transaction and
 recovery rules. Downgrading to M2 discards upload-delivery events and ingestion
 state fields, while retaining canonical purchases and PURCHASE_CREATED events;
 test downgrades run only on the disposable database.
+
+## Milestone 4 schema
+
+Revision `0004_inventory` adds inventory_items (owned identity), inventory_lots
+(unique purchase-line acquisition), and inventory_events (append-only quantity
+and expiry history). Deltas use NUMERIC(20,6), confidence NUMERIC(7,6). Quantities
+are read aggregates. Owner serialization and ledger guards enforce consecutive
+sequences and nonnegative bounded balances; event updates/deletions are rejected.
+
+Composite FKs enforce lot→item owner, lot→purchase owner, lot→line purchase,
+event→lot owner and outbox→event owner. Uniqueness covers line→lot, lot/sequence,
+user/idempotency key and one INVENTORY_CHANGED per event. References are RESTRICT.
+Indexes cover owner lists, item/purchase links, event order and expiry evidence.
+Source/actor/expiry/sign checks reject inconsistent ledger rows.
+
+Products/categories gain nullable inventory_eligible flags; migration classifies
+no existing catalog records. Outbox gains an inventory-event FK, purchase-delivery
+attempt_count/failure_code/failed_at and a ready-job index. The exclusive event
+link check retains M3 kinds and adds INVENTORY_CHANGED.
+
+Downgrade discards inventory history/flags and resets M4-handled PURCHASE_CREATED
+events to pending for later reconstruction. Canonical receipts/purchases survive.
+Round trips are tested only on the disposable database. See ADR-007.

@@ -101,6 +101,15 @@ No fixed taxonomy is currently approved; Milestone 2 seeds no category rows.
 - quantity delta
 - source/reason/actor
 
+Milestone 4 implements these as an append-only ledger. Item identity groups only
+confirmed product/unit pairs per owner; unassociated lines remain separate. Each
+lot is unique to one owned purchase line. Acquired/remaining quantities and latest
+expiry are derived from events, with no writable quantity field. Explicit catalog
+eligibility drives automatic acquisition; unknowns can be confirmed by the user.
+Corrections append events with version/idempotency guards. Expiry preserves date,
+source/confidence and observed/external/inferred provenance. See ADR-007 and the
+inventory workflow for eligibility, event types, transactions and API semantics.
+
 ### Insight
 - user_id
 - type/title/summary

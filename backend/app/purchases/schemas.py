@@ -157,6 +157,7 @@ class MerchantCreate(InputModel):
 
 
 class CategoryCreate(InputModel):
+    inventory_eligible: Annotated[bool, Field(strict=True)] | None = None
     parent_id: UUID | None = None
     name: Annotated[str, Field(min_length=1, max_length=100)]
     slug: Annotated[str, Field(max_length=100, pattern="^[a-z0-9]+(-[a-z0-9]+)*$")]
@@ -165,6 +166,7 @@ class CategoryCreate(InputModel):
 
 
 class ProductCreate(InputModel):
+    inventory_eligible: Annotated[bool, Field(strict=True)] | None = None
     canonical_name: Name
     brand: Annotated[str, Field(max_length=100)] | None = None
     category_id: UUID | None = None
@@ -310,6 +312,7 @@ class MerchantView(TimestampView):
 
 
 class CategoryView(TimestampView):
+    inventory_eligible: bool | None
     parent_id: UUID | None
     name: str
     slug: str
@@ -317,6 +320,7 @@ class CategoryView(TimestampView):
 
 
 class ProductView(TimestampView):
+    inventory_eligible: bool | None
     canonical_name: str
     brand: str | None
     category_id: UUID | None

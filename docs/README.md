@@ -35,3 +35,9 @@ and [ADR-006](decisions/ADR-006-receipt-ingestion.md). Local workers, determinis
 checks, and explicit live verification commands are in [DEVELOPMENT.md](../DEVELOPMENT.md).
 The completed checks and changed-file inventory are recorded in the
 [Milestone 3 validation checkpoint](implementation/milestone-3-validation.md).
+
+Milestone 4 adds event-derived inventory, purchase-event processing, authenticated
+stock corrections and expiry provenance. See [inventory](workflows/inventory.md),
+[ADR-007](decisions/ADR-007-inventory.md), and the inventory API contract.
+Completed checks and files are listed in the
+[Milestone 4 validation checkpoint](implementation/milestone-4-validation.md).
