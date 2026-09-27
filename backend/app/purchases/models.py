@@ -330,6 +330,13 @@ class OutboxEvent(Base):
     __tablename__ = "outbox_events"
     __table_args__ = (
         ForeignKeyConstraint(
+            ["market_search_id", "user_id"],
+            ["market_searches.id", "market_searches.user_id"],
+            name="fk_outbox_events_market_owner",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("market_search_id", name="uq_outbox_events_market_search"),
+        ForeignKeyConstraint(
             ["user_id"], ["users.id"], name="fk_outbox_events_user", ondelete="RESTRICT"
         ),
         ForeignKeyConstraint(
@@ -378,7 +385,8 @@ class OutboxEvent(Base):
         UniqueConstraint("purchase_id", "event_type", name="uq_outbox_events_purchase_type"),
         UniqueConstraint("receipt_id", "event_type", name="uq_outbox_events_receipt_type"),
         CheckConstraint(
-            "((event_type = 'PURCHASE_CREATED' AND purchase_id IS NOT NULL "
+            "(market_search_id IS NULL AND (((event_type = 'PURCHASE_CREATED' "
+            "AND purchase_id IS NOT NULL "
             "AND receipt_id IS NULL AND inventory_event_id IS NULL) "
             "OR (event_type = 'RECEIPT_UPLOADED' AND receipt_id IS NOT NULL "
             "AND purchase_id IS NULL AND inventory_event_id IS NULL) "
@@ -390,7 +398,10 @@ class OutboxEvent(Base):
             "AND evaluation_lot_id IS NULL AND schedule_key IS NULL) "
             "OR (event_type = 'INSIGHT_EVALUATION_REQUESTED' AND schedule_key IS NOT NULL "
             "AND length(schedule_key) > 0 AND purchase_id IS NULL AND receipt_id IS NULL "
-            "AND inventory_event_id IS NULL AND insight_id IS NULL)",
+            "AND inventory_event_id IS NULL AND insight_id IS NULL))) "
+            "OR (event_type = 'MARKET_SEARCH_REQUESTED' AND market_search_id IS NOT NULL "
+            "AND purchase_id IS NULL AND receipt_id IS NULL AND inventory_event_id IS NULL "
+            "AND insight_id IS NULL AND evaluation_lot_id IS NULL AND schedule_key IS NULL)",
             name="event_type_supported",
         ),
         Index(
@@ -429,6 +440,7 @@ class OutboxEvent(Base):
     receipt_id: Mapped[UUID | None] = mapped_column()
     inventory_event_id: Mapped[UUID | None] = mapped_column()
     insight_id: Mapped[UUID | None]
+    market_search_id: Mapped[UUID | None]
     evaluation_lot_id: Mapped[UUID | None]
     schedule_key: Mapped[str | None] = mapped_column(String(240))
     insight_processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

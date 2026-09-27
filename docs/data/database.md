@@ -4,7 +4,7 @@ Primary database: PostgreSQL.
 
 ## Tables
 
-users, user_preferences, receipts, extraction_runs, merchants, purchases, payments, line_items, products, categories, inventory_items, inventory_lots, inventory_events, insights, conversations, messages, tool_executions, memories, wallet_passes, market_price_observations, outbox_events.
+users, user_preferences, receipts, extraction_runs, merchants, purchases, payments, line_items, products, categories, inventory_items, inventory_lots, inventory_events, insights, conversations, messages, tool_executions, memories, wallet_passes, market_searches, market_price_observations, outbox_events.
 
 ## Principles
 
@@ -170,3 +170,24 @@ reset. No new domain event or queue table is introduced. External calls hold no
 database transaction. Downgrade drops only M8 local state and leaves canonical
 data and remote Google objects intact; reconstruction uses the same stable IDs.
 See ADR-011 and the dedicated migration preservation test.
+
+## Milestone 9 market intelligence
+
+Revision `0009_market_intelligence` adds market_searches and
+market_price_observations. Searches retain owner/target relations, bounded canonical
+snapshot JSONB, destination/currency/fingerprint, lifecycle, attempts, leases,
+safe failure codes and cache/completion timestamps. A partial unique active
+owner/fingerprint index and owner serialization prevent duplicate concurrent jobs.
+
+Observations retain relational price/source/provider/merchant/location/URL/times,
+exact NUMERIC(20,6) costs and bounded variable identity/pack/availability evidence.
+Matching status, NUMERIC(7,6) rule confidence, rule version and DERIVED provenance
+are distinct from EXTERNAL offer provenance. Nullable shipping/tax are not zeros.
+Composite search/owner, purchase/owner, line/purchase and outbox/search/owner FKs
+protect attribution. Unique request/provider/offer keys prevent duplicate evidence.
+
+The outbox gains only market_search_id, its ownership FK/unique key and support
+for MARKET_SEARCH_REQUESTED. Existing delivery fields keep their prior meanings;
+the new event is acknowledged through published_at. No M1–M8 events are reset or
+replayed. Downgrade removes M9 requests/observations/events only, leaving canonical
+data and Wallet/inventory/insight subscriber state intact. See ADR-012.

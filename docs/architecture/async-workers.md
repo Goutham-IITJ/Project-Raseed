@@ -105,3 +105,17 @@ token-guarded finalization and stable Generic object upserts support recovery.
 An exhausted/permanent failure remains visible until explicit API or operator
 requeue. `--retry-wallet <pass UUID>` resets only a FAILED Wallet job.
 See [ADR-011](../decisions/ADR-011-google-wallet.md) for the contract and limitations.
+
+## Milestone 9 implementation
+
+MarketService commits an owned MarketSearch and MARKET_SEARCH_REQUESTED outbox
+event together on explicit API/tool lookup. MarketDispatcher delivers at most
+twenty due search IDs through MarketTaskQueue in the existing separate worker.
+The narrow worker boundary derives owner/context from the persisted request.
+
+Five-minute leases fence stale workers. Provider I/O has no open transaction;
+validated observations, success and event acknowledgement commit together. Three
+attempts use 5/10-second backoff plus bounded Retry-After for transient errors;
+configuration/auth/invalid data fail durably. Retry API resets only an owned failed
+job and refuses a conflicting newer active job. No public worker route or new
+broker is introduced. See [ADR-012](../decisions/ADR-012-market-intelligence.md).

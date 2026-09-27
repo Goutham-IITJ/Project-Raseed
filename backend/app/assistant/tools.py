@@ -1,4 +1,4 @@
-"""Closed read-tool registry. All data access goes through owned application services."""
+"""Closed read/external-tool registry; all access uses owned application services."""
 
 import json
 import logging
@@ -25,6 +25,8 @@ from backend.app.identity.context import CurrentUser
 from backend.app.insights.schemas import InsightQuery
 from backend.app.insights.service import InsightService
 from backend.app.inventory.service import InventoryService
+from backend.app.market.schemas import SearchArguments, SearchCreate
+from backend.app.market.service import MarketService
 from backend.app.memory.schemas import MemoryQuery
 from backend.app.memory.service import MemoryService
 from backend.app.purchases.errors import DomainError
@@ -140,6 +142,27 @@ def _register(
 
 def approved_tools() -> tuple[RegisteredTool, ...]:
     return (
+        _register(
+            "search_market_prices",
+            "Queue an external market lookup or reuse fresh owned observations. Identify an owned "
+            "line_item_id or product_id with purchase tools first, and obtain destination country. "
+            "No freeform web query/URL. Pending results have no price conclusion; "
+            "do not busy-poll. "
+            "Only comparable fresh offers support lower DISPLAY price, never checkout savings.",
+            SearchCreate,
+            lambda context, query: MarketService(
+                context.session, context.current_user, clock=lambda: context.now
+            ).search(query),
+        ),
+        _register(
+            "get_market_search",
+            "Read one owned market search, source/observation/expiry evidence and deterministic "
+            "comparison reasons. Stale or uncertain offers cannot support lower-price claims.",
+            SearchArguments,
+            lambda context, query: MarketService(
+                context.session, context.current_user, clock=lambda: context.now
+            ).get(query.search_id),
+        ),
         _register(
             "get_memories",
             "Relevant explicitly saved user statements. Excludes expired memories; "

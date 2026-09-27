@@ -164,6 +164,23 @@ See [ADR-010](../decisions/ADR-010-memory-insights.md).
 - normalized product/merchant/price/currency/location
 - source and observation time
 
+M9 observations are owned external evidence linked to a durable MarketSearch.
+They retain provider/offer ID, source/merchant/URL/location, exact displayed price,
+currency, nullable shipping/tax, observed/fetched/expiry times and EXTERNAL provenance.
+Bounded source identity/pack/availability evidence and persisted matching status,
+confidence and versioned DERIVED rules preserve uncertainty. A canonical product
+link is set only for exact matching; external evidence never rewrites purchase data.
+
+### MarketSearch
+- owned line/purchase or previously purchased product target
+- canonical identity and historical-price snapshot, destination, currency/fingerprint
+- asynchronous status, attempt/availability/error state, lease, cache/creation/completion times
+
+This M9 implementation clarification represents asynchronous searches including
+empty and failed results without inventing placeholder prices. Request and
+MARKET_SEARCH_REQUESTED outbox event commit together. See
+[ADR-012](../decisions/ADR-012-market-intelligence.md).
+
 ### OutboxEvent
 - durable domain event waiting for asynchronous processing
 

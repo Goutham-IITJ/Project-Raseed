@@ -60,5 +60,13 @@ recall, and asynchronous canonical spending/inventory insights. See
 [ADR-010](decisions/ADR-010-memory-insights.md), the memory/insight API contracts,
 [the workflow](workflows/memory-insights.md), and the
 [Milestone 7 checkpoint](implementation/milestone-7-validation.md).
-Wallet, market intelligence, notifications, budgets, recurrence, and assistant
-mutation tools remain deferred.
+Milestone 8 adds the asynchronous Google Wallet projection; see
+[ADR-011](decisions/ADR-011-google-wallet.md).
+
+Milestone 9 adds owned asynchronous market searches, external observations,
+conservative product/pack comparisons and approved assistant tools. See
+[ADR-012](decisions/ADR-012-market-intelligence.md),
+[the workflow](workflows/market-intelligence.md) and
+[the Milestone 9 checkpoint](implementation/milestone-9-validation.md).
+Notifications, budgets, recurrence,
+financial mutation tools and the UI milestone remain deferred.

@@ -36,7 +36,8 @@ def canonical_row_sql(table):
         projection += (
             " - ARRAY['insight_id', 'evaluation_lot_id', 'schedule_key', 'insight_processed_at', "
             "'insight_available_at', 'insight_attempt_count', "
-            "'insight_failure_code', 'insight_failed_at', 'wallet_processed_at']"
+            "'insight_failure_code', 'insight_failed_at', "
+            "'wallet_processed_at', 'market_search_id']"
         )
     return text(f"SELECT ({projection})::text FROM {table} record ORDER BY id")
 
@@ -69,6 +70,8 @@ def test_migration_from_empty_database_and_model_agreement(migrated_engine, data
         "memories",
         "insights",
         "wallet_passes",
+        "market_searches",
+        "market_price_observations",
     }
     assert any(
         constraint["column_names"] == ["firebase_uid"]

@@ -58,6 +58,8 @@ def test_registry_contains_only_typed_approved_read_tools():
     definitions = ToolRegistry().definitions()
     assert {tool.name for tool in definitions} == {
         "get_memories",
+        "search_market_prices",
+        "get_market_search",
         "get_insights",
         "get_insight",
         "get_spending_summary",
@@ -72,7 +74,7 @@ def test_registry_contains_only_typed_approved_read_tools():
         "get_inventory_lot",
         "get_inventory_events",
     }
-    assert len(definitions) == 14
+    assert len(definitions) == 16
     for tool in definitions:
         assert tool.parameters["type"] == "object"
         assert tool.parameters["additionalProperties"] is False

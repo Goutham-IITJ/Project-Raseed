@@ -86,3 +86,13 @@ remain user claims and insight data remains a historical canonical snapshot.
 Current financial questions continue through AnalyticsService/PurchaseService.
 Explicit memory corrections/deletion use authenticated memory controls. See
 [memory and insights](memory-insights.md) for relevance and worker workflows.
+
+## Milestone 9 external questions
+
+search_market_prices and get_market_search are approved external/read tools over
+MarketService. They authorize the owned purchase line/product and return asynchronous
+status or structured external observations/comparisons. No arbitrary URL/query or
+model-provided price enters the service. The assistant preserves historical OBSERVED
+purchase prices, EXTERNAL offer/source/time data and DERIVED comparison evidence.
+Only comparable fresh offers support lower displayed-price claims; pending/stale or
+uncertain results cannot. See [the market workflow](market-intelligence.md).

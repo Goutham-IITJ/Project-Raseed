@@ -8,7 +8,7 @@ from backend.app.purchases.schemas import InputModel, nonblank
 
 MAX_ARGUMENT_BYTES = 16 * 1024
 MAX_RESULT_BYTES = 64 * 1024
-PROMPT_VERSION = "assistant.v2"
+PROMPT_VERSION = "assistant.v3"
 SCHEMA_VERSION = "assistant-answer.v1"
 
 CallID = Annotated[str, Field(min_length=1, max_length=200, pattern=r"^[A-Za-z0-9_.:-]+$")]

@@ -83,7 +83,7 @@ def test_responses_adapter_uses_only_strict_functions_and_preserves_tool_continu
     assert payload["tool_choice"] == "auto"
     assert payload["text"]["format"]["type"] == "json_schema"
     assert payload["text"]["format"]["strict"] is True
-    assert len(payload["tools"]) == 14
+    assert len(payload["tools"]) == 16
     for tool in payload["tools"]:
         assert tool["type"] == "function" and tool["strict"] is True
         assert tool["parameters"]["additionalProperties"] is False

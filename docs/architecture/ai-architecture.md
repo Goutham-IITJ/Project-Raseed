@@ -87,6 +87,16 @@ no model credentials or speculative prose. No new AI provider is configured for 
 
 ## Prompt versioning
 
+M9 uses prompt assistant.v3 and sixteen approved tools. search_market_prices queues
+or reuses an owned external lookup, and get_market_search reads its status/evidence.
+These additions retain the existing audit, argument validation, response grounding,
+model interface and turn limits. No financial mutation or arbitrary web tool is
+enabled. Product/line IDs come from existing purchase tools; the model requests
+missing destination context and reports pending work without busy-polling.
+External offer text remains untrusted. Only service-approved compatible fresh
+observations support lower displayed-price wording; checkout savings are unknown.
+See ADR-012 and the market-intelligence workflow.
+
 Prompts are versioned artifacts. Every extraction run and important AI-generated object stores the prompt/schema/model version used.
 
 ## Semantic validation

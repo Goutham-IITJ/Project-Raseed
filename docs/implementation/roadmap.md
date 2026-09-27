@@ -88,6 +88,11 @@ passes are included. Insight/ticket passes, M9 and UI remain deferred.
 - external search provider
 - normalized price observations
 
+Implemented asynchronous search requests, eBay provider boundary, owned observation
+persistence, conservative identity/pack comparison, freshness and assistant tools:
+[ADR-012](../decisions/ADR-012-market-intelligence.md) and
+[the validation checkpoint](milestone-9-validation.md). No UI milestone is included.
+
 ## Milestone 10 — Hardening
 - security review
 - evaluation datasets

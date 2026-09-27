@@ -15,13 +15,15 @@ from backend.app.inventory.worker import (
     InventoryProcessor,
     LocalInventoryTaskQueue,
 )
+from backend.app.market.ebay import EbayMarketProvider
+from backend.app.market.worker import LocalMarketTaskQueue, MarketDispatcher, MarketProcessor
 from backend.app.wallet.google import GoogleWalletProvider
 from backend.app.wallet.worker import LocalWalletTaskQueue, WalletDispatcher, WalletProcessor
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Dispatch receipt, inventory, insight and Wallet jobs."
+        description="Dispatch receipt, inventory, insight, Wallet and market jobs."
     )
     parser.add_argument("--once", action="store_true", help="Process one ready batch and exit.")
     parser.add_argument(
@@ -55,6 +57,8 @@ def main() -> None:
     insight_dispatcher = InsightDispatcher(processor.factory, LocalInsightTaskQueue(insights))
     wallet = WalletProcessor(processor.factory, GoogleWalletProvider(settings))
     wallet_dispatcher = WalletDispatcher(processor.factory, LocalWalletTaskQueue(wallet))
+    market = MarketProcessor(processor.factory, EbayMarketProvider(settings))
+    market_dispatcher = MarketDispatcher(processor.factory, LocalMarketTaskQueue(market))
     try:
         if args.retry:
             processor.retry(args.retry)
@@ -71,6 +75,7 @@ def main() -> None:
                 insight_dispatcher.schedule_once()
                 insight_dispatcher.dispatch_once()
                 wallet_dispatcher.dispatch_once()
+                market_dispatcher.dispatch_once()
             except SQLAlchemyError:
                 logging.error("Worker database unavailable; durable jobs remain pending.")
                 if args.once:

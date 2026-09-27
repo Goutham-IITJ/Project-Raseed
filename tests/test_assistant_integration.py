@@ -203,7 +203,7 @@ def test_four_endpoints_persist_ordered_messages_and_replay_without_model_calls(
         assert reply["provenance"] == "INFERRED"
         assert reply["status"] == "COMPLETED" and reply["model_attempts"] == 1
         assert reply["reply_to_id"] == pair["user_message"]["id"]
-        assert reply["prompt_version"] == "assistant.v2"
+        assert reply["prompt_version"] == "assistant.v3"
         assert reply["schema_version"] == "assistant-answer.v1"
         assert reply["created_at"].endswith("Z") and reply["completed_at"].endswith("Z")
         assert {"user_id", "lease_token", "lease_expires_at"}.isdisjoint(reply)

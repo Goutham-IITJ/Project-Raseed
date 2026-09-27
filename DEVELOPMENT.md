@@ -370,3 +370,56 @@ On uv versions that strip embedded JSON quotes with `--env-file`, export only
 TEST_DATABASE_URL from `.env` for tests; application settings already load `.env`
 through pydantic-settings. Live Wallet credential/issuer validation is separate
 from the automated suite. Legacy Streamlit and frontend code are unchanged.
+
+## Market intelligence configuration and verification
+
+M9 adds MarketSearch requests and external MarketPriceObservation records. Apply
+`uv run alembic upgrade head` and run the existing `uv run python -m backend.worker`.
+The API and assistant queue lookups; the separate worker performs external I/O.
+Searches, observations, comparisons and retries use `/api/v1/market` (see `/docs`).
+The assistant adds search_market_prices/get_market_search with its existing audit
+and grounding. Pending requests are read later; no automatic assistant reply or
+notification is introduced.
+
+The first adapter is eBay Browse. Configure MARKET_EBAY_TOKEN with an application
+OAuth token for the Browse API and MARKET_EBAY_MARKETPLACE with EBAY_US, EBAY_GB,
+EBAY_DE or EBAY_AU. The requested destination must match that marketplace's country.
+Keep the token in the ignored environment/secret manager and rotate it according
+to its lifetime; invalid/expired credentials fail visibly and can be retried after
+replacement. MARKET_REQUEST_TIMEOUT_SECONDS defaults to 10 (maximum 20). No token
+is needed for startup or tests, and no live provider request was used in validation.
+Other regions, including Indian retail coverage, need another provider adapter;
+Raseed never converts currencies to make incompatible offers appear comparable.
+
+Canonical Product metadata may carry `identity_source: OBSERVED`, a checksum-valid
+`gtin`, `mpn`, `variant` and `pack` with explicit quantity/unit/count. Existing receipt
+ingestion supplies observed GTIN where available; absent pack data stays unknown.
+M9 does not enrich catalog records or guess pack sizes from receipt/listing titles.
+Only complete compatible identity/pack/pricing evidence supports lower displayed
+price. The eBay adapter uses explicit listing aspects and often returns observations
+without enough evidence for comparison. Shipping/tax and checkout savings remain
+separate from this display-price comparison.
+Multi-item lots leave pack composition unknown; the adapter does not assume that
+listing aspects describe the full lot.
+
+External observations retain source URL, seller/destination context, observed/fetched
+time, expiry and matching confidence. A fifteen-minute freshness limit, bounded
+cache, three attempts with backoff, leases and explicit failed-request retry keep
+external failures independent of purchases. Old observations remain readable but
+cannot support a fresh comparison. Full contracts are in ADR-012 and the API docs.
+
+With TEST_DATABASE_URL set to the separate disposable PostgreSQL database:
+
+```powershell
+uv run pytest
+uv run ruff check backend tests database
+uv run ruff format --check backend tests database
+uv run mypy backend
+uv run alembic upgrade head
+uv run alembic check
+```
+
+The deterministic tests cover matching uncertainty, pack/unit/currency differences,
+provenance, stale evidence, ownership, malformed responses, retry/crash recovery,
+asynchronous assistant invocation and preservation of canonical/M8 data. No UI,
+Wallet behavior, notification or currency-conversion feature is included.

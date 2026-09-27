@@ -16,6 +16,7 @@ from backend.app.api.analytics import router as analytics_router
 from backend.app.api.assistant import router as assistant_router
 from backend.app.api.insights import router as insights_router
 from backend.app.api.inventory import router as inventory_router
+from backend.app.api.market import router as market_router
 from backend.app.api.memory import router as memory_router
 from backend.app.api.purchases import router as purchase_router
 from backend.app.api.routes import router
@@ -137,6 +138,7 @@ def create_app(
     application.include_router(memory_router)
     application.include_router(insights_router)
     application.include_router(wallet_router)
+    application.include_router(market_router)
     return application
 
 

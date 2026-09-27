@@ -32,7 +32,8 @@ def test_wallet_roundtrip_preserves_m7_and_rebuilds_same_external_objects(
     tables = [
         name
         for name in inspect(env.database).get_table_names()
-        if name not in {"alembic_version", "wallet_passes"}
+        if name
+        not in {"alembic_version", "wallet_passes", "market_searches", "market_price_observations"}
     ]
 
     def snapshot():
@@ -42,7 +43,11 @@ def test_wallet_roundtrip_preserves_m7_and_rebuilds_same_external_objects(
                     connection.scalars(
                         text(
                             "SELECT (to_jsonb(record)"
-                            + (" - 'wallet_processed_at'" if table == "outbox_events" else "")
+                            + (
+                                " - ARRAY['wallet_processed_at', 'market_search_id']"
+                                if table == "outbox_events"
+                                else ""
+                            )
                             + f")::text FROM {table} record ORDER BY id"
                         )
                     )

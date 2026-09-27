@@ -666,3 +666,93 @@ wallet_authorization, wallet_rate_limited and wallet_unavailable (503). They do 
 change canonical data or synchronization status. Worker errors use the same safe
 codes plus wallet_lease_expired and are read through the pass status API. Error
 responses never include provider bodies or credentials. See ADR-011 for recovery.
+
+## Market intelligence (Milestone 9)
+
+All routes use Firebase ownership, strict body/query validation and no-store. No
+route accepts an owner, URL, freeform search query, price, product evidence or
+provider choice from the client/model. Missing/foreign IDs return identical 404s.
+The service preserves canonical historical prices independently of external offers.
+
+### POST /api/v1/market/searches
+
+Accepts exactly one of line_item_id or product_id, a required uppercase registered
+two-letter country, and optional postal_code (1–20 alphanumeric/space/hyphen
+characters, trimmed and uppercased). A product must be linked to an owned purchase.
+
+```json
+{"line_item_id":"<owned line UUID>","country":"US","postal_code":"10001"}
+```
+
+Returns 202 `{"data":search}` for both newly queued and reused requests. No provider
+call occurs in the request. Repeating the same target snapshot and destination
+reuses an owned pending/fresh search, including cached empty/failed results. A new
+request is created after expiry. No query parameters are accepted.
+
+The search view includes id, line_item_id, product_id, country, postal_code, target,
+status, attempt_count, failure_code, next_attempt_at, created_at, completed_at,
+expires_at and observations. Status is PENDING, PROCESSING, RETRY, SUCCEEDED or
+FAILED. Ownership, fingerprint, leases and provider credentials are private.
+
+Target includes identity (name, optional brand/GTIN/MPN/variant/pack), identity
+provenance, currency, nullable recorded unit_price/pricing_unit/purchased_at and
+price_provenance=OBSERVED. Product-only searches have no selected historical price
+and use the owner's currency. Line searches use their canonical purchase currency.
+Pack is `{quantity: decimal string, unit: g|kg|ml|l|each, count: positive integer}`.
+Absent or untrusted metadata is unknown, never inferred from arbitrary item text.
+
+### GET /api/v1/market/searches/{id}
+
+Returns 200 `{"data":search}` with current persisted status and up to five
+observations. No query parameters. A successful empty result means this bounded
+provider search found no offers, not that no offers exist elsewhere. Pending and
+failed requests contain no fabricated observations or comparison conclusions.
+
+Each observation contains id, search_id, nullable matched product_id, provider,
+provenance=EXTERNAL, offer, fetched_at, effective expires_at, stale and comparison.
+The offer retains name/brand/GTIN/MPN/variant/pack, offer_id, source, merchant, HTTPS
+URL, nullable seller location and delivery_country, observed_at, optional provider
+expires_at, exact price/currency, nullable shipping/tax, condition and availability.
+Monetary values serialize as exact strings. URLs are source references, not fetched
+by the API or assistant. Do not render external text as executable HTML.
+
+Comparison contains matching (EXACT/UNCERTAIN/MISMATCH, rule confidence, versioned
+rule, DERIVED provenance), comparable, reasons, conclusion, nullable exact
+display_price_difference (external minus historical unit price), provenance=DERIVED
+and checkout_savings_known=false. LOWER_DISPLAY_PRICE, EQUAL_DISPLAY_PRICE or
+HIGHER_DISPLAY_PRICE require all compatibility/freshness gates. Otherwise conclusion
+is NOT_COMPARABLE with reasons such as identity_not_exact, unknown_pack,
+pack_mismatch, no_historical_unit_price, unsupported_pricing_unit, currency_mismatch,
+delivery_not_confirmed, condition_not_new, stock_not_confirmed or stale_observation.
+These results never establish all-in checkout savings or currency conversion.
+
+Observations expire fifteen minutes after observed_at, capped by earlier provider
+expiry. Fetching an older price never renews its age. Search caching ends at the
+earliest observation expiry, or fifteen minutes after an empty success/failure.
+Expired observations remain readable as historical evidence with comparisons blocked.
+
+### POST /api/v1/market/searches/{id}/retry
+
+Requires `{}` and no query parameters. Returns 202 after requeuing an owned FAILED
+request with a new three-attempt budget. Returns 409 if not failed or a newer active
+request has the same fingerprint. Transient retries otherwise use persisted
+5/10-second backoff and bounded Retry-After; callers cannot bypass active backoff.
+Failure codes include market_configuration, market_authorization,
+market_unavailable, market_timeout, market_rate_limited, market_invalid_data,
+market_rejected and market_lease_expired. No provider diagnostics are exposed.
+
+### GET /api/v1/market/observations/{id}
+
+Returns 200 `{"data":observation}` including stale evidence and its current
+comparison eligibility against the original canonical target snapshot. No query
+parameters. Ownership is checked through both observation and search.
+
+### Assistant tools
+
+search_market_prices takes the POST search fields; get_market_search takes only
+search_id. Both use MarketService and the existing audited tool boundary. The
+registry has sixteen tools and prompt assistant.v3. The model obtains line/product
+IDs from purchase tools and asks for missing destination context. It reports pending
+work without polling repeatedly and can read completion on a later turn. Only
+validated service conclusions and cited external source/time data support a lower
+displayed-price explanation. No general web access or financial write is enabled.

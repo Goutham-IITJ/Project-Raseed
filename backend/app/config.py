@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     )
     wallet_origins: list[str] = Field(default_factory=list)
     wallet_request_timeout_seconds: float = Field(default=15, gt=0, le=30)
+    market_ebay_token: SecretStr = SecretStr("")
+    market_ebay_marketplace: Literal["EBAY_US", "EBAY_GB", "EBAY_DE", "EBAY_AU"] = "EBAY_US"
+    market_request_timeout_seconds: float = Field(default=10, gt=0, le=20)
 
     @field_validator("database_url")
     @classmethod

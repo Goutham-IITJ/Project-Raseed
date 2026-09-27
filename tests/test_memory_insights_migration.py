@@ -78,7 +78,7 @@ def test_memory_insight_migration_preserves_m6_and_original_outbox_state(environ
                         "'schedule_key', "
                         "'insight_processed_at', 'insight_available_at', 'insight_attempt_count', "
                         "'insight_failure_code', 'insight_failed_at', "
-                        "'wallet_processed_at'])::text "
+                        "'wallet_processed_at', 'market_search_id'])::text "
                         "FROM outbox_events record WHERE event_type IN "
                         "('PURCHASE_CREATED', 'RECEIPT_UPLOADED', 'INVENTORY_CHANGED') ORDER BY id"
                     )
