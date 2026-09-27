@@ -89,3 +89,19 @@ operator requeue remain on the source outbox row. Duplicate delivery is a no-op.
 Explicit memory CRUD is a short authenticated service transaction. No automatic
 memory-extraction worker is introduced; saving every message is intentionally
 excluded. See [ADR-010](../decisions/ADR-010-memory-insights.md).
+
+## Milestone 8 implementation
+
+WalletDispatcher hands off at most twenty PURCHASE_CREATED events into unique
+WalletPass jobs and acknowledges wallet_processed_at in the same transaction.
+Inventory/insight delivery state is unaffected; existing purchases are eligible.
+The dispatcher sends up to twenty due pass IDs through WalletTaskQueue to the
+WalletProcessor in the same separate worker process. No public worker route exists.
+
+WalletPass carries the complete retry/lease/error lifecycle. Short claims read
+canonical owned purchase snapshots and release transactions before REST or signing
+I/O. Three attempts with backoff, classified provider failures, expiring leases,
+token-guarded finalization and stable Generic object upserts support recovery.
+An exhausted/permanent failure remains visible until explicit API or operator
+requeue. `--retry-wallet <pass UUID>` resets only a FAILED Wallet job.
+See [ADR-011](../decisions/ADR-011-google-wallet.md) for the contract and limitations.

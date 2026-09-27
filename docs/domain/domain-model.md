@@ -122,6 +122,14 @@ inventory workflow for eligibility, event types, transactions and API semantics.
 - pass type/provider/class/object IDs
 - synchronization state
 
+M8 has one GOOGLE/GENERIC pass per owned canonical purchase. Stable external IDs,
+per-cycle attempts, availability, safe last errors, last successful sync and leased
+processing form a durable external-projection lifecycle. An owned composite FK
+protects the purchase link. Google success records acceptance of canonical data,
+not canonical financial evidence or proof that a user saved the pass. No provider
+payload, signed link, private receipt URL or payment instrument is persisted here.
+See [ADR-011](../decisions/ADR-011-google-wallet.md).
+
 ### Conversation / Message / ToolExecution
 - persistent assistant conversation and auditable tool calls
 

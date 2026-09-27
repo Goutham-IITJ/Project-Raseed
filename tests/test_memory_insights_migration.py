@@ -77,7 +77,8 @@ def test_memory_insight_migration_preserves_m6_and_original_outbox_state(environ
                         "SELECT (to_jsonb(record) - ARRAY['insight_id', 'evaluation_lot_id', "
                         "'schedule_key', "
                         "'insight_processed_at', 'insight_available_at', 'insight_attempt_count', "
-                        "'insight_failure_code', 'insight_failed_at'])::text "
+                        "'insight_failure_code', 'insight_failed_at', "
+                        "'wallet_processed_at'])::text "
                         "FROM outbox_events record WHERE event_type IN "
                         "('PURCHASE_CREATED', 'RECEIPT_UPLOADED', 'INVENTORY_CHANGED') ORDER BY id"
                     )

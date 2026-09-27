@@ -66,7 +66,8 @@ def database(migrated_engine: Engine) -> Iterator[Engine]:
     with migrated_engine.begin() as connection:
         connection.execute(
             text(
-                "TRUNCATE memories, insights, tool_executions, messages, conversations, "
+                "TRUNCATE wallet_passes, memories, insights, tool_executions, "
+                "messages, conversations, "
                 "outbox_events, inventory_events, inventory_lots, inventory_items, "
                 "payments, line_items, purchases, extraction_runs, "
                 "receipts, products, categories, merchants, user_preferences, users"

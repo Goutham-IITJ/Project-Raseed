@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     assistant_max_tool_calls: int = Field(default=8, ge=1, le=8)
     assistant_max_attempts: int = Field(default=2, ge=1, le=3)
     assistant_max_output_tokens: int = Field(default=4096, ge=256, le=16384)
+    wallet_issuer_id: str = Field(default="", pattern=r"^(?:[0-9]{1,40})?$")
+    wallet_service_account_email: str = Field(
+        default="", pattern=r"^(?:[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.iam\.gserviceaccount\.com)?$"
+    )
+    wallet_origins: list[str] = Field(default_factory=list)
+    wallet_request_timeout_seconds: float = Field(default=15, gt=0, le=30)
 
     @field_validator("database_url")
     @classmethod
@@ -47,4 +53,24 @@ class Settings(BaseSettings):
     def explicit_origins(cls, value: list[str]) -> list[str]:
         if any(origin == "*" or not origin.startswith(("http://", "https://")) for origin in value):
             raise ValueError("CORS origins must be explicit HTTP(S) origins")
+        return value
+
+    @field_validator("wallet_origins")
+    @classmethod
+    def wallet_web_origins(cls, value: list[str]) -> list[str]:
+        from urllib.parse import urlsplit
+
+        for origin in value:
+            parsed = urlsplit(origin)
+            if (
+                parsed.scheme not in {"http", "https"}
+                or not parsed.hostname
+                or parsed.username
+                or parsed.password
+                or parsed.path
+                or parsed.query
+                or parsed.fragment
+                or "*" in origin
+            ):
+                raise ValueError("Wallet origins must be explicit HTTP(S) origins without paths")
         return value

@@ -19,6 +19,7 @@ from backend.app.api.inventory import router as inventory_router
 from backend.app.api.memory import router as memory_router
 from backend.app.api.purchases import router as purchase_router
 from backend.app.api.routes import router
+from backend.app.api.wallet import router as wallet_router
 from backend.app.assistant.factory import make_assistant_model
 from backend.app.assistant.model import AssistantModel
 from backend.app.config import Settings
@@ -28,6 +29,8 @@ from backend.app.identity.firebase import FirebaseTokenVerifier
 from backend.app.ingestion.factory import make_storage
 from backend.app.ingestion.storage import ObjectStorage
 from backend.app.purchases.errors import DomainError
+from backend.app.wallet.google import GoogleWalletProvider
+from backend.app.wallet.provider import WalletProvider
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +50,7 @@ def create_app(
     session_factory: sessionmaker[Session] | None = None,
     storage: ObjectStorage | None = None,
     assistant_model: AssistantModel | None = None,
+    wallet_provider: WalletProvider | None = None,
 ) -> FastAPI:
     config = settings or Settings()
     engine = make_engine(config.database_url) if session_factory is None else None
@@ -69,6 +73,9 @@ def create_app(
     application.state.session_factory = factory
     application.state.token_verifier = token_verifier
     application.state.settings = config
+    application.state.wallet_provider = (
+        wallet_provider if wallet_provider is not None else GoogleWalletProvider(config)
+    )
     application.state.object_storage = storage if storage is not None else make_storage(config)
     application.state.assistant_model = (
         assistant_model if assistant_model is not None else make_assistant_model(config)
@@ -129,6 +136,7 @@ def create_app(
     application.include_router(assistant_router)
     application.include_router(memory_router)
     application.include_router(insights_router)
+    application.include_router(wallet_router)
     return application
 
 

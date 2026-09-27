@@ -347,6 +347,14 @@ class OutboxEvent(Base):
         UniqueConstraint("insight_id", name="uq_outbox_events_insight"),
         UniqueConstraint("user_id", "schedule_key", name="uq_outbox_events_user_schedule"),
         CheckConstraint("insight_attempt_count >= 0", name="insight_attempt_count"),
+        Index(
+            "ix_outbox_events_wallet_ready",
+            "created_at",
+            "id",
+            postgresql_where=text(
+                "wallet_processed_at IS NULL AND event_type = 'PURCHASE_CREATED'"
+            ),
+        ),
         ForeignKeyConstraint(
             ["inventory_event_id", "user_id"],
             ["inventory_events.id", "inventory_events.user_id"],
@@ -424,6 +432,7 @@ class OutboxEvent(Base):
     evaluation_lot_id: Mapped[UUID | None]
     schedule_key: Mapped[str | None] = mapped_column(String(240))
     insight_processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    wallet_processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     insight_available_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

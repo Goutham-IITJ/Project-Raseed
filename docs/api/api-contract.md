@@ -1,4 +1,4 @@
-# Raseed API v1 — identity, purchases, receipts, inventory, analytics, and assistant
+# Raseed API v1 — identity, purchases, receipts, inventory, analytics, assistant and Wallet
 
 ## Transport, versioning, authentication
 
@@ -607,3 +607,62 @@ Insight citations can reference data.source_data scalars using M6's grounding ru
 There are no memory write tools; explicit creation/correction/deletion uses the
 memory API above. For current financial or inventory answers the assistant continues
 to use the original canonical tools.
+
+## Google Wallet (Milestone 8)
+
+Wallet is an external projection of a canonical purchase. These routes use the
+same Firebase authentication, ownership, strict validation and `Cache-Control:
+no-store` rules. Missing/foreign purchase or pass IDs return identical 404 errors.
+No client can supply an owner, provider identifier, amount or synchronization state.
+
+### POST /api/v1/wallet/passes
+
+Accepts only `{"purchase_id":"<owned purchase UUID>"}`. Returns 202
+`{"data":wallet_pass}` with the existing or newly queued pass. Repeating the request
+returns the same pass and preserves its current status/backoff. Purchase creation
+also schedules this projection through the independent outbox subscriber, so this
+endpoint can ensure a pass before the worker handles the purchase event. No Google
+API call occurs here. Manual purchases without a receipt are supported.
+
+The pass view contains id, purchase_id, provider=GOOGLE, pass_type=GENERIC,
+nullable class_id/object_id, status, attempt_count, next_attempt_at, nullable
+last_error_code/last_error_at/synced_at, created_at and updated_at. Owner IDs and
+leases are private. Class/object IDs are assigned once configured and then remain
+stable. States are PENDING, SYNCING, RETRY, SYNCED and FAILED. attempt_count is the
+current cycle's count; next_attempt_at is actionable only for nonterminal states.
+SYNCED records API acceptance, not proof of saving into a Google account.
+
+### GET /api/v1/wallet/passes
+
+Returns 200 `{"data":[wallet_pass,...]}`. Supports limit (1–100, default 20), offset
+(0–10000, default 0), optional purchase_id and optional status. Ordering is
+created_at/UUID descending. Ownership filters always apply; foreign filters return
+an empty list. Unknown query parameters are rejected with 422.
+
+### GET /api/v1/wallet/passes/{id}
+
+Returns 200 `{"data":wallet_pass}`. No query parameters are accepted.
+
+### POST /api/v1/wallet/passes/{id}/sync
+
+Requires an empty JSON object. Returns 202 with the pass. SYNCED/FAILED passes are
+queued with a fresh three-attempt budget; PENDING/RETRY/SYNCING passes keep their
+existing job/backoff/lease. Provider work runs only in the worker. This also recovers
+failures after deployment configuration is corrected. No query parameters accepted.
+
+### POST /api/v1/wallet/passes/{id}/add-to-wallet
+
+Requires an empty JSON object and a SYNCED pass; otherwise returns 409. Returns 200
+`{"data":{"save_url":"https://pay.google.com/gp/v/save/<signed JWT>"}}`. Signing
+uses managed server credentials outside database transactions. The JWT contains
+only the stable Generic class/object references, configured signer/origins and
+issuance/expiry claims. The URL is a bearer capability, never stored or logged by
+Raseed. Google controls acceptance of the five-minute expiry claim and actual saving.
+No query parameters accepted. No authentication token is included in the save URL.
+
+Signing errors use the standard safe envelope: wallet_timeout (504),
+wallet_invalid_response/wallet_rejected (502), or wallet_configuration,
+wallet_authorization, wallet_rate_limited and wallet_unavailable (503). They do not
+change canonical data or synchronization status. Worker errors use the same safe
+codes plus wallet_lease_expired and are read through the pass status API. Error
+responses never include provider bodies or credentials. See ADR-011 for recovery.

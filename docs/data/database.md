@@ -154,3 +154,19 @@ daily scheduling evaluates current data without replaying every historical event
 Upgrade preserves M1–M6 tables and original delivery state. Downgrade removes only
 M7 memories, insights, event kinds, links and subscriber fields. Tests compare
 canonical/M6 rows and original outbox state across the round trip. See ADR-010.
+
+## Milestone 8 Wallet persistence
+
+Revision `0008_google_wallet` adds wallet_passes with UUID/owner/purchase,
+provider/type, nullable stable class/object IDs, lifecycle, attempt/availability,
+lease, safe last-error and sync/creation/update fields. Composite purchase/owner
+FKs, purchase/provider/type uniqueness, provider/object uniqueness and lifecycle
+checks protect ownership and retries. Indexes cover owned lists and ready jobs.
+
+Outbox adds wallet_processed_at and a partial index for unhanded PURCHASE_CREATED
+events. A short transaction inserts the pass job and marks this handoff together.
+Old events remain eligible for bounded backfill; no original delivery state is
+reset. No new domain event or queue table is introduced. External calls hold no
+database transaction. Downgrade drops only M8 local state and leaves canonical
+data and remote Google objects intact; reconstruction uses the same stable IDs.
+See ADR-011 and the dedicated migration preservation test.

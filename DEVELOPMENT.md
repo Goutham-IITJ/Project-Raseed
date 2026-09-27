@@ -321,3 +321,52 @@ recall, exact inventory evidence, insight dismissal and owner isolation against
 real PostgreSQL. Authentication and model boundaries are test injections only.
 Rule thresholds, evidence limits, snapshots and deferrals are recorded in ADR-010
 and `docs/workflows/memory-insights.md`.
+
+## Google Wallet configuration and verification
+
+M8 uses the existing PostgreSQL and separate worker. Apply `uv run alembic upgrade
+head`, then run `uv run python -m backend.worker`. PURCHASE_CREATED events,
+including existing purchases, become durable WalletPass jobs in batches of twenty.
+The API can queue/read a pass without Google credentials. Unconfigured worker
+attempts fail visibly with wallet_configuration and can be requeued after setup.
+
+Configure WALLET_ISSUER_ID, WALLET_SERVICE_ACCOUNT_EMAIL, WALLET_ORIGINS (a JSON
+array of explicit HTTP(S) web origins), and optionally WALLET_REQUEST_TIMEOUT_SECONDS
+(default 15). Enable the Google Wallet API and IAM Service Account Credentials API.
+Use managed Application Default Credentials with Wallet issuer access; register the
+configured signing service account with the same Wallet issuer. The ADC principal
+needs iam.serviceAccounts.signJwt on that signer (for example the appropriately
+scoped Service Account Token Creator role). This also applies when the caller and
+signer are the same service account. Production publishing/issuer approval and test
+user access are controlled by Google. No account credentials are committed or needed
+by automated tests. The application makes no Google request at startup.
+
+POST `/api/v1/wallet/passes` with purchase_id queues one owned Generic pass. GET
+collection/detail reads persisted status. POST `/{id}/sync` with `{}` requeues a
+SYNCED/FAILED pass; pending jobs retain backoff. POST `/{id}/add-to-wallet` with `{}`
+returns a signed Google save URL only after SYNCED. URLs are bearer capabilities
+and should be used transiently. No Google user account is linked or saving tracked.
+The API contract and ADR-011 describe fields, safe errors and lifecycle precisely.
+
+Transient failures receive three attempts with 5/10-second backoff and bounded
+Retry-After. Permanent/exhausted jobs stay FAILED. After fixing the cause, use the
+owned sync endpoint or `uv run python -m backend.worker --retry-wallet <pass UUID>
+--once`. The same issuer/object IDs are retained across retries and reconstruction.
+Worker crashes recover after a five-minute lease; external calls hold no DB locks.
+
+Tests use fake providers and mocked Google REST/IAM signing with real PostgreSQL.
+With TEST_DATABASE_URL set to the separate disposable database, run:
+
+```powershell
+uv run pytest
+uv run ruff check backend tests database
+uv run ruff format --check backend tests database
+uv run mypy backend
+uv run alembic upgrade head
+uv run alembic check
+```
+
+On uv versions that strip embedded JSON quotes with `--env-file`, export only
+TEST_DATABASE_URL from `.env` for tests; application settings already load `.env`
+through pydantic-settings. Live Wallet credential/issuer validation is separate
+from the automated suite. Legacy Streamlit and frontend code are unchanged.

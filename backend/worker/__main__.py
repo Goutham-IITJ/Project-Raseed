@@ -15,11 +15,13 @@ from backend.app.inventory.worker import (
     InventoryProcessor,
     LocalInventoryTaskQueue,
 )
+from backend.app.wallet.google import GoogleWalletProvider
+from backend.app.wallet.worker import LocalWalletTaskQueue, WalletDispatcher, WalletProcessor
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Dispatch receipt, inventory, and scheduled insight jobs."
+        description="Dispatch receipt, inventory, insight and Wallet jobs."
     )
     parser.add_argument("--once", action="store_true", help="Process one ready batch and exit.")
     parser.add_argument(
@@ -31,8 +33,11 @@ def main() -> None:
     parser.add_argument(
         "--retry-insight", type=UUID, help="Requeue exhausted insight delivery by event ID."
     )
+    parser.add_argument(
+        "--retry-wallet", type=UUID, help="Requeue failed Wallet synchronization by pass ID."
+    )
     args = parser.parse_args()
-    # All three dispatchers run outside the API process.
+    # All dispatchers run outside the API process.
     settings = Settings()
     engine = make_engine(settings.database_url)
     processor = ReceiptProcessor(
@@ -48,6 +53,8 @@ def main() -> None:
     )
     insights = InsightProcessor(processor.factory)
     insight_dispatcher = InsightDispatcher(processor.factory, LocalInsightTaskQueue(insights))
+    wallet = WalletProcessor(processor.factory, GoogleWalletProvider(settings))
+    wallet_dispatcher = WalletDispatcher(processor.factory, LocalWalletTaskQueue(wallet))
     try:
         if args.retry:
             processor.retry(args.retry)
@@ -55,12 +62,15 @@ def main() -> None:
             inventory.retry(args.retry_inventory)
         if args.retry_insight:
             insights.retry(args.retry_insight)
+        if args.retry_wallet:
+            wallet.retry(args.retry_wallet)
         while True:
             try:
                 dispatcher.dispatch_once()
                 inventory_dispatcher.dispatch_once()
                 insight_dispatcher.schedule_once()
                 insight_dispatcher.dispatch_once()
+                wallet_dispatcher.dispatch_once()
             except SQLAlchemyError:
                 logging.error("Worker database unavailable; durable jobs remain pending.")
                 if args.once:

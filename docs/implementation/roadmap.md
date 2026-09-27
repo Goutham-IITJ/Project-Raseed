@@ -78,6 +78,11 @@ memory is saved. Financial/inventory insights run in the existing separate worke
 - synchronization
 - failure/retry states
 
+Implemented persistence, REST/signing boundary, stable IDs, owned APIs, independent
+outbox handoff, leased synchronization and retry contracts:
+[ADR-011](../decisions/ADR-011-google-wallet.md). Only canonical purchase Generic
+passes are included. Insight/ticket passes, M9 and UI remain deferred.
+
 ## Milestone 9 — Market intelligence
 - product matching
 - external search provider
