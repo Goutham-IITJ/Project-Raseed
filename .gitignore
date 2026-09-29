@@ -28,3 +28,7 @@ dist/
 *.log
 *service-account*.json
 *firebase-adminsdk*.json
+
+# Browser test artifacts
+**/test-results/
+**/playwright-report/

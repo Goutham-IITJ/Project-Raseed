@@ -423,3 +423,50 @@ The deterministic tests cover matching uncertainty, pack/unit/currency differenc
 provenance, stale evidence, ownership, malformed responses, retry/crash recovery,
 asynchronous assistant invocation and preservation of canonical/M8 data. No UI,
 Wallet behavior, notification or currency-conversion feature is included.
+
+
+## Product interface (M10)
+
+The Next.js app in `apps/web` now provides Overview, Purchases and purchase
+Details, Inventory and lot activity, Insights and evidence, Assistant conversation
+history, Google Wallet passes, Settings, and a persistent Add Receipt dialog.
+It uses the existing Firebase Google sign-in and backend APIs. Copy the frontend
+`.env.example` to the ignored `.env.local` and configure your Firebase public web
+metadata and API origin. Run the backend and existing receipt/inventory/insight/
+Wallet worker as described above; uploads and pass preparation complete there.
+
+```powershell
+cd apps/web
+npm.cmd ci
+npm.cmd run dev
+```
+
+The UI keeps currencies separate, formats server decimal strings without floating
+point conversion, and labels unknown/estimated/external evidence. Inventory
+updates append versioned, idempotent events. Receipt and assistant polling stop
+after forty three-second refreshes and retain manual refresh. Needs-review
+receipts explain the current support path; no correction endpoint is invented.
+Settings save currency, locale and timezone, then reload the account. Firebase
+session persistence clears the browser session on sign-out.
+
+Validation:
+
+```powershell
+npm.cmd test
+npm.cmd run lint
+npm.cmd run typecheck
+npm.cmd run build
+npm.cmd exec playwright install chromium
+npm.cmd run test:e2e
+```
+
+Use `npm` instead of `npm.cmd` on macOS/Linux. Playwright starts a separate local
+Next dev server on port 3100 with test-only public configuration, seeds Firebase
+session persistence in an isolated browser context, and intercepts Firebase/API
+transports. It never contacts production or adds a production authentication
+bypass. Desktop and mobile tests cover navigation/focus, capture, private receipt
+viewing, inventory changes, insight dismissal, Wallet retry, assistant evidence,
+preferences, sign-out and error/empty states at 320px. Browser traces/screenshots
+are ignored locally and uploaded by CI on failure. Backend integration tests
+separately exercise real PostgreSQL ownership, literal purchase search and private
+file reads. Live Google sign-in/provider credentials remain environment setup.

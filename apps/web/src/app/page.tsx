@@ -1,11 +1,5 @@
-import { IdentityCard } from "@/components/identity-card";
+import { Overview } from "@/components/screens/overview";
 
 export default function Home() {
-  return (
-    <main>
-      <header className="brand">raseed<span>V2</span></header>
-      <IdentityCard />
-      <footer>Your purchase memory starts with you.</footer>
-    </main>
-  );
+  return <Overview />;
 }

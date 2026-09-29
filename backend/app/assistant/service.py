@@ -92,6 +92,13 @@ class AssistantService:
                 repository.create_conversation(data.title, self._now())
             )
 
+    def list_conversations(self, page: PageQuery) -> list[ConversationView]:
+        with self._factory() as session, session.begin():
+            return [
+                ConversationView.model_validate(row)
+                for row in AssistantRepository(session, self._user).conversations(page)
+            ]
+
     def get_conversation(self, conversation_id: UUID) -> ConversationView:
         with self._factory() as session, session.begin():
             return ConversationView.model_validate(

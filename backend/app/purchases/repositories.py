@@ -19,7 +19,7 @@ from backend.app.purchases.models import (
     Purchase,
     Receipt,
 )
-from backend.app.purchases.queries import PurchaseFilters, ResolvedPeriod
+from backend.app.purchases.queries import PurchaseFilters, PurchaseHistoryQuery, ResolvedPeriod
 from backend.app.purchases.schemas import (
     CategoryCreate,
     ExtractionRunCreate,
@@ -220,12 +220,22 @@ class PurchaseRepository(OwnedRepository):
         filters: PurchaseFilters | None = None,
         period: ResolvedPeriod | None = None,
     ) -> list[Purchase]:
+        conditions = purchase_conditions(self._current_user, filters or PurchaseFilters(), period)
+        if isinstance(page, PurchaseHistoryQuery) and page.query is not None:
+            conditions.append(
+                Purchase.merchant_name_raw.icontains(page.query, autoescape=True)
+                | select(LineItem.id)
+                .where(
+                    LineItem.purchase_id == Purchase.id,
+                    LineItem.raw_name.icontains(page.query, autoescape=True),
+                )
+                .correlate(Purchase)
+                .exists()
+            )
         return list(
             self._session.scalars(
                 select(Purchase)
-                .where(
-                    *purchase_conditions(self._current_user, filters or PurchaseFilters(), period)
-                )
+                .where(*conditions)
                 .options(selectinload(Purchase.line_items), selectinload(Purchase.payments))
                 .order_by(Purchase.purchased_at.desc(), Purchase.id.desc())
                 .limit(page.limit)

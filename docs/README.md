@@ -68,5 +68,8 @@ conservative product/pack comparisons and approved assistant tools. See
 [ADR-012](decisions/ADR-012-market-intelligence.md),
 [the workflow](workflows/market-intelligence.md) and
 [the Milestone 9 checkpoint](implementation/milestone-9-validation.md).
-Notifications, budgets, recurrence,
-financial mutation tools and the UI milestone remain deferred.
+Milestone 10 completes the responsive product interface using the existing
+services. See [ADR-013](decisions/ADR-013-product-interface.md) for the minimal
+read contracts and [the M10 checkpoint](implementation/milestone-10-validation.md)
+for delivered screens and validation. Notifications, budgets, recurrence,
+financial mutation tools and operational hardening remain deferred.

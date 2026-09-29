@@ -30,7 +30,7 @@ from backend.app.market.service import MarketService
 from backend.app.memory.schemas import MemoryQuery
 from backend.app.memory.service import MemoryService
 from backend.app.purchases.errors import DomainError
-from backend.app.purchases.queries import PurchaseHistoryQuery
+from backend.app.purchases.queries import PeriodQuery, PurchaseFilters, PurchaseHistoryQuery
 from backend.app.purchases.schemas import InputModel, PageQuery, PurchaseView
 from backend.app.purchases.service import PurchaseService
 
@@ -41,6 +41,10 @@ View = TypeVar("View", bound=BaseModel)
 
 class PurchaseArguments(InputModel):
     purchase_id: UUID
+
+
+class PurchaseHistoryArguments(PeriodQuery, PurchaseFilters, PageQuery):
+    """Keep the approved assistant contract independent of UI-only search."""
 
 
 class ItemArguments(InputModel):
@@ -106,10 +110,15 @@ class ToolContext:
         return InventoryService(self.session, self.current_user, clock=lambda: self.now)
 
 
-def _history(context: ToolContext, query: PurchaseHistoryQuery) -> ReadPage[PurchaseToolView]:
+def _history(context: ToolContext, query: PurchaseHistoryArguments) -> ReadPage[PurchaseToolView]:
     return ReadPage(
         provenance="OBSERVED",
-        items=[_purchase_view(row) for row in context.purchases().list_purchases(query)],
+        items=[
+            _purchase_view(row)
+            for row in context.purchases().list_purchases(
+                PurchaseHistoryQuery.model_validate(query.model_dump())
+            )
+        ],
         limit=query.limit,
         offset=query.offset,
     )
@@ -236,7 +245,7 @@ def approved_tools() -> tuple[RegisteredTool, ...]:
             "Owned purchase history with typed period/currency/merchant/category/product/status "
             "filters, newest first. Defaults to all-time, limit twenty, offset zero. Page items "
             "include canonical lines and recorded payments; do not compute totals from a page.",
-            PurchaseHistoryQuery,
+            PurchaseHistoryArguments,
             _history,
         ),
         _register(

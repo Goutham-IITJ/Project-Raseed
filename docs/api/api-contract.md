@@ -101,7 +101,17 @@ Receipt views retain the existing metadata fields and add:
 `status` is the processing state; `uploaded_at` and `processed_at` distinguish
 artifact acceptance and canonical completion. No internal storage URI, user ID,
 lease, prompt, raw provider response, or credentials are returned. No private
-file-download endpoint is currently needed or exposed.
+storage reference or public download URL is exposed. M10 adds the owned original
+file endpoint below.
+
+### GET /api/v1/receipts/{id}/file (M10)
+
+Returns the uploaded original bytes with the recorded MIME type,
+`Content-Disposition: attachment`, `Cache-Control: no-store` and
+`X-Content-Type-Options: nosniff`. Ownership is checked before storage access;
+missing, foreign and not-yet-uploaded receipts return the same 404. Storage reads
+take place outside the database transaction and verify the recorded content hash.
+The browser displays a transient blob URL and revokes it when the viewer closes.
 
 NEEDS_REVIEW is terminal until explicit operator reprocessing; FAILED may be
 scheduled for bounded automatic retry or need operator attention. This milestone
@@ -294,7 +304,11 @@ financial semantics and snapshot policy. There are no analytics write routes.
 
 Filters combine with AND. Catalog IDs without qualifying owned purchases produce
 empty results, identically for missing IDs and IDs used only by another owner.
-No free-text search, timezone override, or user selector is supported.
+No timezone override or user selector is supported. M10 adds `query` only to
+purchase history: 1–200 nonblank characters, matched as a literal case-insensitive
+substring of the recorded merchant name or any raw line-item name. SQL wildcards
+are escaped. This combines with the filters and pagination above. Analytics
+rejects `query`; clients must not recalculate spending from paginated search results.
 
 Analytics data includes `provenance: "DERIVED"`, the validated `filters` object
 (omitted filters are null), and `period` with start_date, end_date, timezone,
@@ -391,6 +405,12 @@ Body: `{}` or `{"title":"September purchases"}`. Title is nullable, nonblank whe
 present, and at most 200 characters. Unknown fields/query parameters are rejected.
 Returns 201 with `{"data":{"id": "...", "title": "...", "created_at": "...",
 "updated_at": "..."}}`. Timestamps are UTC. No model is called.
+
+### GET /api/v1/assistant/conversations (M10)
+
+Lists only the current user's conversations, ordered by updated_at and UUID
+descending. Accepts the existing limit (1–100) and offset (0–10000) pagination;
+unknown parameters are rejected. This read invokes no model.
 
 ### GET /api/v1/assistant/conversations/{id}
 

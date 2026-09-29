@@ -15,7 +15,13 @@ export interface RaseedUser {
 export class ApiError extends Error {
   constructor(public readonly status: number) {
     super(status === 401 ? "Your session could not be verified. Please sign in again."
-      : "We couldn't load your account. Please try again.");
+      : status === 404 ? "This item is no longer available or doesn't belong to your account."
+      : status === 409 ? "This request conflicts with the latest record. Refresh before trying again."
+      : status === 413 ? "This receipt is too large. Choose a file smaller than 10 MB."
+      : status === 415 ? "This file could not be read. Use a JPG, PNG or unencrypted PDF."
+      : status === 422 ? "Some details aren't valid. Check your entries and try again."
+      : status === 0 ? "We couldn't reach Raseed. Check your connection and try again."
+      : "Raseed couldn't complete this request. Please try again shortly.");
   }
 }
 

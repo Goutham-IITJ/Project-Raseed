@@ -25,8 +25,12 @@ from backend.app.ingestion.schema import PROMPT_VERSION, SCHEMA_VERSION, Receipt
 from backend.app.ingestion.storage import ObjectStorage
 from backend.app.ingestion.upload import Upload, validate_upload
 from backend.app.ingestion.validation import validate_extraction
-from backend.app.purchases.errors import Conflict, DomainError
-from backend.app.purchases.repositories import OutboxRepository, PurchaseRepository
+from backend.app.purchases.errors import Conflict, DomainError, NotFound
+from backend.app.purchases.repositories import (
+    OutboxRepository,
+    PurchaseRepository,
+    ReceiptRepository,
+)
 from backend.app.purchases.schemas import ReceiptView
 
 logger = logging.getLogger(__name__)
@@ -48,6 +52,23 @@ class UploadService:
         self._repository = UploadRepository(session, current_user)
         self._storage = storage
         self._settings = settings
+        self._receipts = ReceiptRepository(session, current_user)
+
+    def file(self, receipt_id: UUID) -> tuple[bytes, str, str]:
+        with self._session.begin():
+            receipt = self._receipts.get(receipt_id)
+            if receipt.storage_uri is None or receipt.uploaded_at is None:
+                raise NotFound
+            reference, mime, filename = (
+                receipt.storage_uri,
+                receipt.mime_type,
+                receipt.original_filename,
+            )
+            expected_hash = receipt.content_hash
+        content = self._storage.get_object(reference)
+        if hashlib.sha256(content).hexdigest() != expected_hash:
+            raise StorageUnavailable
+        return content, mime, filename
 
     def upload(self, upload: Upload) -> ReceiptView:
         metadata = validate_upload(upload, self._settings)

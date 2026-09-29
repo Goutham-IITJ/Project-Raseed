@@ -1004,3 +1004,21 @@ def test_local_http_assistant_against_postgresql(populated):
         thread.join(timeout=15)
         listener.close()
         assert not thread.is_alive()
+
+
+def test_product_conversation_history_is_owned_paginated_and_does_not_invoke_model(client):
+    path = "/api/v1/assistant/conversations"
+    first = client.post(path, headers=ALICE, json={"title": "First"}).json()["data"]
+    second = client.post(path, headers=ALICE, json={"title": "Second"}).json()["data"]
+    client.post(path, headers=BOB, json={"title": "Private"})
+    response = client.get(path, headers=ALICE)
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    assert [row["id"] for row in response.json()["data"]] == [second["id"], first["id"]]
+    assert client.get(path, headers=ALICE, params={"limit": 1, "offset": 1}).json()["data"] == [
+        first
+    ]
+    assert client.get(path, headers=ALICE, params={"offset": 2}).json()["data"] == []
+    assert client.get(path).status_code == 401
+    assert client.get(path, headers=ALICE, params={"user_id": "bob"}).status_code == 422
+    assert client.get(path, headers=ALICE, params={"limit": 101}).status_code == 422

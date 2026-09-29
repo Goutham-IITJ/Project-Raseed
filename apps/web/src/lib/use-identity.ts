@@ -20,7 +20,7 @@ export function useIdentity() {
     const controller = new AbortController();
     requestRef.current = controller;
     const user = authRef.current?.currentUser;
-    setProfile(null);
+    setProfile(previous => previous?.firebase_uid === user?.uid ? previous : null);
     setSignedIn(Boolean(user));
     setError(null);
     setLoading(Boolean(user));
@@ -30,6 +30,7 @@ export function useIdentity() {
       if (!controller.signal.aborted) setProfile(result);
     } catch (cause) {
       if (!controller.signal.aborted) {
+        setProfile(null);
         setError(cause instanceof Error ? cause.message : "Unable to load your account.");
       }
     } finally {
@@ -88,5 +89,11 @@ export function useIdentity() {
     }
   };
 
-  return { profile, signedIn, loading, busy, error, ready, login, logout, reload };
+  const getToken = useCallback(async () => {
+    const user = authRef.current?.currentUser;
+    if (!user || user.uid !== profile?.firebase_uid) throw new Error("Please sign in to continue.");
+    return user.getIdToken();
+  }, [profile?.firebase_uid]);
+
+  return { profile, signedIn, loading, busy, error, ready, login, logout, reload, getToken };
 }

@@ -173,6 +173,10 @@ class ConversationResponse(BaseModel):
     data: ConversationView
 
 
+class ConversationListResponse(BaseModel):
+    data: list[ConversationView]
+
+
 class MessageListResponse(BaseModel):
     data: list[MessageView]
 

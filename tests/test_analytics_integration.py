@@ -832,3 +832,42 @@ def test_local_http_analytics_and_purchase_history_against_postgresql(populated)
         thread.join(timeout=15)
         listener.close()
         assert not thread.is_alive()
+
+
+def test_product_purchase_search_is_literal_owned_and_composes_with_filters(analytics):
+    env = analytics
+    matched = purchase(
+        env, merchant_name_raw="Corner SHOP", line_items=[{"raw_name": "Tea 10%_off"}]
+    )
+    purchase(env, merchant_name_raw="Other", line_items=[{"raw_name": "Tea 100 off"}])
+    purchase(
+        env,
+        owner=env.bob,
+        merchant_name_raw="Corner SHOP",
+        line_items=[{"raw_name": "Tea 10%_off"}],
+    )
+
+    def search(**query):
+        response = env.client.get("/api/v1/purchases", headers=ALICE, params=query)
+        assert response.status_code == 200
+        return response.json()["data"]
+
+    assert [row["id"] for row in search(query=" corner shop ")] == [str(matched.id)]
+    assert [row["id"] for row in search(query="10%_")] == [str(matched.id)]
+    assert len(search(query="TEA")) == 2
+    assert len(search(query="tea", limit=1, offset=1)) == 1
+    assert search(query="tea", payment_status="PAID") == []
+    assert search(query="tea", start_date="2025-01-01", end_date="2025-02-01") == []
+    for invalid in ["", "   ", "x" * 201, "\x00"]:
+        assert (
+            env.client.get(
+                "/api/v1/purchases", headers=ALICE, params={"query": invalid}
+            ).status_code
+            == 422
+        )
+    assert (
+        env.client.get(
+            "/api/v1/analytics/spending-summary", headers=ALICE, params={"query": "tea"}
+        ).status_code
+        == 422
+    )

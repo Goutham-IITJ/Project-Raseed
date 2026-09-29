@@ -210,7 +210,9 @@ def test_upload_authentication_ownership_and_private_access(ingestion):
         purchases = list(session.scalars(select(Purchase)))
         assert len(purchases) == 2 and purchases[0].user_id != purchases[1].user_id
         assert session.scalar(select(func.count()).select_from(Merchant)) == 1
-    assert env.client.get(f"/api/v1/receipts/{alice['id']}/file", headers=ALICE).status_code == 404
+    # M10 exposes the private original to its owner; foreign access stays hidden.
+    assert env.client.get(f"/api/v1/receipts/{alice['id']}/file", headers=ALICE).status_code == 200
+    assert env.client.get(f"/api/v1/receipts/{alice['id']}/file", headers=BOB).status_code == 404
 
 
 def test_unknown_form_fields_and_multiple_files_are_rejected(ingestion):
@@ -621,3 +623,53 @@ def test_transient_storage_read_failure_and_review_can_be_retried(ingestion, mon
         assert session.scalar(select(func.count()).select_from(ExtractionRun)) == 3
     with pytest.raises(Conflict):
         env.processor.retry(UUID(receipt["id"]))
+
+
+@pytest.mark.parametrize("kind", ["png", "pdf"])
+def test_owned_original_file_is_private_and_validated(ingestion, kind, monkeypatch):
+    env = ingestion
+    receipt = upload(env, kind, filename=f"original receipt.{kind}").json()["data"]
+    path = f"/api/v1/receipts/{receipt['id']}/file"
+    reads = []
+    original = env.storage.get_object
+
+    def read(reference):
+        reads.append(reference)
+        return original(reference)
+
+    monkeypatch.setattr(env.storage, "get_object", read)
+    assert env.client.get(path).status_code == 401
+    assert env.client.get(path, headers=BOB).status_code == 404
+    assert env.client.get(f"/api/v1/receipts/{uuid4()}/file", headers=ALICE).status_code == 404
+    assert reads == []
+    response = env.client.get(path, headers=ALICE)
+    assert response.status_code == 200
+    assert response.content == document(kind)
+    assert response.headers["content-type"] == receipt["mime_type"]
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert "original%20receipt" in response.headers["content-disposition"]
+    assert len(reads) == 1
+    assert env.client.get(path + "?user_id=alice", headers=ALICE).status_code == 422
+    monkeypatch.setattr(env.storage, "get_object", lambda reference: b"corrupted")
+    assert env.client.get(path, headers=ALICE).status_code == 503
+
+
+def test_original_file_rejects_metadata_without_upload(ingestion):
+    response = ingestion.client.post(
+        "/api/v1/receipts",
+        headers=ALICE,
+        json={
+            "original_filename": "pending.png",
+            "mime_type": "image/png",
+            "file_size": 100,
+            "content_hash": "a" * 64,
+            "source": "USER_UPLOAD",
+        },
+    )
+    assert response.status_code == 201
+    receipt_id = response.json()["data"]["id"]
+    assert (
+        ingestion.client.get(f"/api/v1/receipts/{receipt_id}/file", headers=ALICE).status_code
+        == 404
+    )

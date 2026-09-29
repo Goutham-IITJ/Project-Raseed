@@ -8,6 +8,7 @@ from backend.app.api.dependencies import get_current_user, reject_query_paramete
 from backend.app.assistant.model import AssistantModel
 from backend.app.assistant.schemas import (
     ConversationCreate,
+    ConversationListResponse,
     ConversationResponse,
     MessageCreate,
     MessageListResponse,
@@ -41,6 +42,13 @@ def get_assistant_service(
 
 Service = Annotated[AssistantService, Depends(get_assistant_service)]
 NoQuery = Annotated[None, Depends(reject_query_parameters)]
+
+
+@router.get("", response_model=ConversationListResponse)
+def list_conversations(
+    service: Service, page: Annotated[PageQuery, Query()]
+) -> ConversationListResponse:
+    return ConversationListResponse(data=service.list_conversations(page))
 
 
 @router.post("", response_model=ConversationResponse, status_code=201)

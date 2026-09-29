@@ -11,6 +11,15 @@ from backend.app.purchases.schemas import PageQuery
 
 
 class AssistantRepository(OwnedRepository):
+    def conversations(self, page: PageQuery) -> Sequence[Conversation]:
+        return self._session.scalars(
+            select(Conversation)
+            .where(Conversation.user_id == self._current_user.id)
+            .order_by(Conversation.updated_at.desc(), Conversation.id.desc())
+            .limit(page.limit)
+            .offset(page.offset)
+        ).all()
+
     def conversation(self, conversation_id: UUID, *, for_update: bool = False) -> Conversation:
         statement = select(Conversation).where(
             Conversation.user_id == self._current_user.id, Conversation.id == conversation_id

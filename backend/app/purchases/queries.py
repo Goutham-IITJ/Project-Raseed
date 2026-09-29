@@ -83,7 +83,17 @@ class PurchaseFilters(InputModel):
 
 
 class PurchaseHistoryQuery(PeriodQuery, PurchaseFilters, PageQuery):
-    pass
+    query: Annotated[str, Field(min_length=1, max_length=200)] | None = None
+
+    @field_validator("query")
+    @classmethod
+    def valid_query(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if "\x00" in value:
+            raise ValueError("Invalid search text")
+        value.encode("utf-8")
+        return nonblank(value.strip())
 
 
 @dataclass(frozen=True)

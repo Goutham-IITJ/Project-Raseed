@@ -1,4 +1,5 @@
 from typing import Annotated, cast
+from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request, Response
@@ -109,6 +110,24 @@ def list_receipts(service: Service, page: Pagination) -> ReceiptListResponse:
 @router.get("/receipts/{receipt_id}", response_model=ReceiptResponse)
 def get_receipt(receipt_id: UUID, service: Service, no_query: NoQuery) -> ReceiptResponse:
     return ReceiptResponse(data=service.get_receipt(receipt_id))
+
+
+@router.get("/receipts/{receipt_id}/file", response_class=Response)
+def receipt_file(
+    receipt_id: UUID,
+    no_query: NoQuery,
+    service: Annotated[UploadService, Depends(get_upload_service)],
+) -> Response:
+    content, mime, filename = service.file(receipt_id)
+    return Response(
+        content,
+        media_type=mime,
+        headers={
+            "Content-Disposition": "attachment; filename*=UTF-8''" + quote(filename, safe=""),
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 @router.get("/purchases", response_model=PurchaseListResponse)
