@@ -263,3 +263,4 @@ details > summary { cursor: pointer; font-size: 12px; font-weight: 600; color: #
   .button, .icon-button, .send-button, .text-button { min-height: 44px; }
   .send-button { min-width: 44px; }
 }
+.demo-banner { position: sticky; top: 0; z-index: 60; display: flex; flex-wrap: wrap; gap: 6px 20px; padding: 12px 24px; background: #fff0c2; color: #513d16; border-bottom: 1px solid #d6b869; font-size: 13px; }

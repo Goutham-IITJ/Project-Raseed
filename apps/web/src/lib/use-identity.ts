@@ -4,8 +4,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { GoogleAuthProvider, onIdTokenChanged, signInWithPopup, signOut, type Auth } from "firebase/auth";
 import { getMe, type RaseedUser } from "./api";
 import { getFirebaseAuth } from "./firebase";
+import { localDemoEnabled } from "./demo";
+import { useDemoIdentity } from "./use-demo-identity";
 
 export function useIdentity() {
+  const demo = localDemoEnabled();
+  const firebase = useFirebaseIdentity(!demo);
+  const local = useDemoIdentity(demo);
+  return { ...(demo ? local : firebase), demo };
+}
+
+function useFirebaseIdentity(enabled: boolean) {
   const [profile, setProfile] = useState<RaseedUser | null>(null);
   const [signedIn, setSignedIn] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -39,6 +48,7 @@ export function useIdentity() {
   }, []);
 
   useEffect(() => {
+    if (!enabled) return;
     let active = true;
     let unsubscribe: (() => void) | undefined;
     getFirebaseAuth().then((auth) => {
@@ -58,7 +68,7 @@ export function useIdentity() {
       requestRef.current?.abort();
       authRef.current = null;
     };
-  }, [reload]);
+  }, [enabled, reload]);
 
   const login = async () => {
     if (!authRef.current) return;

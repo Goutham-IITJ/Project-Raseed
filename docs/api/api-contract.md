@@ -9,6 +9,12 @@ Every endpoint below requires `Authorization: Bearer <Firebase ID token>`.
 The Firebase Admin SDK verifies tokens; uid resolves to an internal UUID through
 concurrency-safe first-request provisioning. No Raseed session cookie is issued.
 
+The explicit [local demo](../implementation/local-demo.md) is a development-only
+exception using one fixed fixture credential and the same owned API contracts.
+It cannot be selected in production configuration. It has no authentication
+endpoint and does not accept a client-selected user. External provider actions
+return `409 demo_external_action` in that mode.
+
 Ownership comes exclusively from verified server context. Identity endpoints accept
 no query parameters. Collection endpoints accept only documented filters and pagination.
 No endpoint accepts user ID, Firebase uid, or email as an ownership selector.

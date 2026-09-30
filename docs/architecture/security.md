@@ -18,6 +18,12 @@ the verifier interface. Auth emulator tokens are not supported by this foundatio
 See [ADR-004](../decisions/ADR-004-identity-foundation.md) and the
 [API contract](../api/api-contract.md).
 
+The optional development-only local demo in
+[ADR-014](../decisions/ADR-014-local-demo.md) uses a single fixed fixture identity,
+explicit environment gates, a dedicated local database and request-origin/peer
+checks. It is disabled by default and rejected by production configuration.
+The Firebase production adapter and normal ownership repositories are unchanged.
+
 ## Authorization
 
 Every domain query and mutation is scoped to the authenticated user. Never trust client-supplied user IDs.

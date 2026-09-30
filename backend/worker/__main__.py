@@ -41,6 +41,10 @@ def main() -> None:
     args = parser.parse_args()
     # All dispatchers run outside the API process.
     settings = Settings()
+    if settings.local_demo:
+        parser.error(
+            "The external worker is disabled in local demo; use python -m backend.demo seed."
+        )
     engine = make_engine(settings.database_url)
     processor = ReceiptProcessor(
         make_session_factory(engine),

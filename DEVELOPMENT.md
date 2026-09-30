@@ -1,5 +1,9 @@
 # Raseed V2 development
 
+To browse the completed UI without Firebase credentials, follow the
+[local demo setup and seed commands](docs/implementation/local-demo.md).
+Demo is development-only, uses a separate database and labels all synthetic data.
+
 V2 lives in `apps/web`, `backend`, `database`, and `tests`. The root `main.py`,
 legacy `requirements.txt`, `utilities`, `navigation_pages`, and `database_files`
 remain the Streamlit prototype. Do not use its database, credentials, or storage

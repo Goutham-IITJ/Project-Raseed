@@ -1,7 +1,9 @@
+import os
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlsplit
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 
@@ -10,6 +12,9 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=ROOT / ".env", extra="ignore")
+
+    app_env: Literal["development", "test", "production"] = "production"
+    local_demo: bool = False
 
     database_url: str = "postgresql+psycopg://raseed:raseed_local@localhost:5432/raseed"
     firebase_project_id: str = ""
@@ -43,6 +48,39 @@ class Settings(BaseSettings):
     market_ebay_token: SecretStr = SecretStr("")
     market_ebay_marketplace: Literal["EBAY_US", "EBAY_GB", "EBAY_DE", "EBAY_AU"] = "EBAY_US"
     market_request_timeout_seconds: float = Field(default=10, gt=0, le=20)
+
+    @model_validator(mode="after")
+    def demo_is_local_only(self) -> "Settings":
+        if self.local_demo:
+            database = make_url(self.database_url)
+            if (
+                self.app_env != "development"
+                or any(
+                    os.getenv(key)
+                    for key in ("K_SERVICE", "GAE_ENV", "VERCEL", "WEBSITE_INSTANCE_ID")
+                )
+                or database.host not in {"localhost", "127.0.0.1", "::1"}
+                or not (database.database or "").endswith("_demo")
+                or self.storage_provider != "local"
+            ):
+                raise ValueError(
+                    "Local demo requires development, loopback PostgreSQL *_demo and local storage"
+                )
+            for origin in self.cors_origins:
+                parsed = urlsplit(origin)
+                if (
+                    parsed.scheme != "http"
+                    or parsed.hostname not in {"localhost", "127.0.0.1", "::1"}
+                    or parsed.username
+                    or parsed.password
+                    or parsed.path
+                    or parsed.query
+                    or parsed.fragment
+                ):
+                    raise ValueError(
+                        "Local demo CORS origins must be explicit loopback HTTP origins"
+                    )
+        return self
 
     @field_validator("database_url")
     @classmethod

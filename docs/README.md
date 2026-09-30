@@ -2,6 +2,10 @@
 
 This directory is the authoritative product and architecture specification for Raseed V2.
 
+To explore the completed product UI without Firebase credentials, use the
+[development-only local demo](implementation/local-demo.md) approved in
+[ADR-014](decisions/ADR-014-local-demo.md).
+
 ## Source of truth hierarchy
 
 1. Approved documents in `docs/` are the architectural/product contract.

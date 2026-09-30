@@ -9,7 +9,7 @@ import { walletUrl } from "@/lib/client";
 import { dateTime } from "@/lib/format";
 import type { WalletPass } from "@/lib/types";
 export function WalletActions({ pass, onChange }: { pass: WalletPass; onChange: () => void }) {
-  const { api, profile } = useSession();
+  const { api, profile, demo } = useSession();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   async function act(save: boolean) {
@@ -20,7 +20,7 @@ export function WalletActions({ pass, onChange }: { pass: WalletPass; onChange: 
     } catch (cause) { setError((cause as Error).message); }
     finally { setBusy(false); }
   }
-  return <div className="wallet-actions"><Status value={pass.status} />{pass.status === "SYNCED" ? <><button className="button wallet-save" disabled={busy} onClick={() => void act(true)}><span className="google-g" aria-hidden="true">G</span>{busy ? "Opening…" : "Add to Google Wallet"}</button><p className="caption">Ready to save. Google Wallet confirms the final addition.</p><button className="text-button" disabled={busy} onClick={() => void act(false)}>Refresh pass details</button></> : pass.status === "FAILED" ? <><p className="help-text">This pass couldn’t be prepared. Your purchase is still safely stored in Raseed.</p><button className="button secondary" disabled={busy} onClick={() => void act(false)}><Icon name="refresh" size={16} />{busy ? "Queuing…" : "Retry synchronization"}</button></> : <><p className="muted">{pass.status === "RETRY" ? "Another attempt is scheduled for " + dateTime(pass.next_attempt_at, profile.locale, profile.timezone, true) + "." : "Your pass is being prepared. You can return to it later."}</p><button className="text-button" disabled={busy} onClick={onChange}><Icon name="refresh" size={15} />Check status</button></>}{error && <ErrorState message={error} />}</div>;
+  return <div className="wallet-actions"><Status value={pass.status} />{pass.status === "SYNCED" ? <><button className="button wallet-save" disabled={busy || demo} onClick={() => void act(true)}><span className="google-g" aria-hidden="true">G</span>{busy ? "Opening…" : "Add to Google Wallet"}</button><p className="caption">Ready to save. Google Wallet confirms the final addition.</p><button className="text-button" disabled={busy || demo} onClick={() => void act(false)}>Refresh pass details</button></> : pass.status === "FAILED" ? <><p className="help-text">This pass couldn’t be prepared. Your purchase is still safely stored in Raseed.</p><button className="button secondary" disabled={busy || demo} onClick={() => void act(false)}><Icon name="refresh" size={16} />{busy ? "Queuing…" : "Retry synchronization"}</button></> : <><p className="muted">{pass.status === "RETRY" ? "Another attempt is scheduled for " + dateTime(pass.next_attempt_at, profile.locale, profile.timezone, true) + "." : "Your pass is being prepared. You can return to it later."}</p><button className="text-button" disabled={busy || demo} onClick={onChange}><Icon name="refresh" size={15} />Check status</button></>}{error && <ErrorState message={error} />}</div>;
 }
 export function Wallet() {
   const { api, profile } = useSession();

@@ -26,6 +26,7 @@ from backend.app.assistant.model import AssistantModel
 from backend.app.config import Settings
 from backend.app.database import make_engine, make_session_factory
 from backend.app.identity.context import TokenVerifier
+from backend.app.identity.demo import LocalDemoVerifier
 from backend.app.identity.firebase import FirebaseTokenVerifier
 from backend.app.ingestion.factory import make_storage
 from backend.app.ingestion.storage import ObjectStorage
@@ -54,13 +55,20 @@ def create_app(
     wallet_provider: WalletProvider | None = None,
 ) -> FastAPI:
     config = settings or Settings()
+    demo_enabled = config.local_demo
+    if demo_enabled:
+        Settings.model_validate(config.model_dump())
     engine = make_engine(config.database_url) if session_factory is None else None
     if session_factory is not None:
         factory = session_factory
     else:
         assert engine is not None
         factory = make_session_factory(engine)
-    token_verifier = verifier or FirebaseTokenVerifier(config.firebase_project_id)
+    token_verifier = verifier or (
+        LocalDemoVerifier(config)
+        if demo_enabled
+        else FirebaseTokenVerifier(config.firebase_project_id)
+    )
 
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
@@ -90,6 +98,31 @@ def create_app(
 
     @application.middleware("http")
     async def no_store(request: Request, call_next: RequestResponseEndpoint) -> Response:
+        if demo_enabled:
+            # Do not trust forwarded host/identity headers or expose demo over a LAN/proxy.
+            loopback = {"localhost", "127.0.0.1", "::1"}
+            if (
+                request.client is None
+                or request.client.host not in loopback
+                or request.url.hostname not in loopback
+                or (
+                    request.headers.get("origin") is not None
+                    and request.headers["origin"] not in config.cors_origins
+                )
+            ):
+                return error_response(
+                    "demo_local_only", "Local demo accepts loopback requests only.", 403
+                )
+            path = request.url.path
+            if request.method == "POST" and (
+                path.startswith(("/api/v1/wallet/", "/api/v1/market/"))
+                or (path.startswith("/api/v1/assistant/") and path.endswith("/messages"))
+            ):
+                return error_response(
+                    "demo_external_action",
+                    "External processing is unavailable in local demo. Browse the seeded examples.",
+                    409,
+                )
         response = await call_next(request)
         response.headers["Cache-Control"] = "no-store"
         return response
