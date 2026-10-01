@@ -2,6 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./e2e",
+  outputDir: "./test-results/product",
   fullyParallel: true,
   workers: 2,
   retries: 0,
@@ -17,6 +18,8 @@ export default defineConfig({
     reuseExistingServer: false,
     timeout: 120000,
     env: {
+      RASEED_WEB_TEST: "product",
+      NEXT_PUBLIC_LOCAL_DEMO: "false",
       NEXT_PUBLIC_API_BASE_URL: "http://127.0.0.1:8100",
       NEXT_PUBLIC_FIREBASE_API_KEY: "raseed-browser-test",
       NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: "raseed-test.firebaseapp.com",

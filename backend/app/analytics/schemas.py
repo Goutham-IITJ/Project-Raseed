@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Literal
 from uuid import UUID
@@ -153,3 +153,38 @@ class MerchantResponse(BaseModel):
 
 class ComparisonResponse(BaseModel):
     data: ComparisonView
+
+
+class TrendPoint(AnalyticsView):
+    date: date
+    currency: str
+    total_spent: Decimal
+    purchase_count: int
+
+
+class TrendView(AnalysisMetadata):
+    interval: Literal["day", "month"]
+    points: list[TrendPoint]
+
+
+class TrendResponse(BaseModel):
+    data: TrendView
+
+
+class PaymentAmounts(AnalyticsView):
+    currency: str
+    method: str
+    total_amount: Decimal
+    payment_count: int
+
+
+class PaymentGroup(PaymentAmounts):
+    share_of_total_percent: Decimal | None
+
+
+class PaymentView(AnalysisMetadata):
+    groups: list[PaymentGroup]
+
+
+class PaymentResponse(BaseModel):
+    data: PaymentView

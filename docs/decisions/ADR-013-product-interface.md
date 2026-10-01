@@ -24,7 +24,7 @@ semantics or persistence:
 - GET assistant/conversations returns owned conversations ordered by updated_at
   and UUID descending with existing limit/offset bounds. It invokes no model.
 
-The product routes are Overview, Purchases, Inventory, Insights, Assistant,
+The product routes are Overview, Purchases, Analysis, Inventory, Insights, Assistant,
 Wallet and Settings, with a persistent Add Receipt action. Small screens use an
 accessible navigation drawer. Receipt polling is bounded and offers manual refresh;
 NEEDS_REVIEW never promises an unimplemented correction endpoint. Inventory edits
@@ -35,3 +35,28 @@ Tests substitute identity/provider interfaces in isolated browser contexts and
 intercept loopback API transports; PostgreSQL integration tests separately verify
 the real backend boundaries. Production Firebase verification is unchanged.
 No legacy Streamlit, new budgeting, notification or analytics architecture work.
+
+## Product redesign read contracts
+
+The redesigned Overview and Analysis need a time series and payment distribution.
+Two additive reads extend the existing AnalyticsService/repository; no persistence,
+authentication, assistant tool contract or financial rule changes:
+
+- `GET /analytics/spending-trend` accepts AnalyticsQuery. It groups owned purchase
+  grand totals by local calendar day for ranges up to 62 days, otherwise month.
+  Ranges longer than 3660 days return 422 to bound the series. Empty buckets are
+  zero-filled per represented currency (or the explicitly selected currency).
+  Partial months include only purchases within the requested half-open interval;
+  the bucket date is the month's first day. Whole current periods follow ADR-008.
+- `GET /analytics/spending-by-payment` accepts AnalyticsQuery. It groups recorded
+  Payment amounts by method and currency, joined only to matching owned purchases.
+  Shares use recorded payments in that currency, with null for a zero denominator.
+  Missing payment records are not imputed from purchase totals. No instrument
+  references or last-four digits are returned.
+
+Both return DERIVED metadata, exact decimal strings and the resolved period and
+filters in the normal no-store envelope. Existing read-only repeatable-read
+snapshots and ownership predicates apply. SVG geometry uses numeric projections
+only; displayed totals, shares and changes come from the backend. Charts include
+accessible exact values. Category comparisons reuse the existing category endpoint
+with the comparison service's resolved date boundaries.

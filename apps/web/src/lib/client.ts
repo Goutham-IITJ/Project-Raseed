@@ -1,5 +1,5 @@
 import { ApiError } from "./api";
-import type { Categories, Comparison, Conversation, Insight, InventoryCommand, InventoryEvent, InventoryItem, Lot, Merchants, Message, Preferences, Purchase, Query, Receipt, Summary, Turn, WalletPass } from "./types";
+import type { Categories, Comparison, Conversation, Insight, InventoryCommand, InventoryEvent, InventoryItem, Lot, Merchants, Message, PaymentDistribution, Preferences, Purchase, Query, Receipt, Summary, Trend, Turn, WalletPass } from "./types";
 
 export function queryString(query: Query = {}) {
   const params = new URLSearchParams();
@@ -32,6 +32,8 @@ export class RaseedApi {
   receiptFile = async (id: string, signal?: AbortSignal) => (await this.response("/receipts/" + encodeURIComponent(id) + "/file", { signal })).blob();
   summary = (query: Query, signal?: AbortSignal) => this.read<Summary>("/analytics/spending-summary" + queryString(query), signal);
   comparison = (query: Query, signal?: AbortSignal) => this.read<Comparison>("/analytics/period-comparison" + queryString(query), signal);
+  trend = (query: Query, signal?: AbortSignal) => this.read<Trend>("/analytics/spending-trend" + queryString(query), signal);
+  payments = (query: Query, signal?: AbortSignal) => this.read<PaymentDistribution>("/analytics/spending-by-payment" + queryString(query), signal);
   categories = (query: Query, signal?: AbortSignal) => this.read<Categories>("/analytics/spending-by-category" + queryString(query), signal);
   merchants = (query: Query, signal?: AbortSignal) => this.read<Merchants>("/analytics/spending-by-merchant" + queryString(query), signal);
   items = (query: Query = {}, signal?: AbortSignal) => this.read<InventoryItem[]>("/inventory/items" + queryString(query), signal);

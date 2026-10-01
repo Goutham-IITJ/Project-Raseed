@@ -275,6 +275,97 @@ def test_currency_selection_empty_results_and_payment_coverage(populated):
     assert Decimal(paid["recorded_payment_total"]) == Decimal("10.30")
 
 
+def test_trend_uses_local_days_exact_totals_and_owned_currency_buckets(populated):
+    data = result(populated, "spending-trend")
+    assert data["provenance"] == "DERIVED" and data["interval"] == "day"
+    points = {(row["date"], row["currency"]): row for row in data["points"]}
+    assert len(points) == 60
+    assert Decimal(points["2026-09-01", "INR"]["total_spent"]) == Decimal("10.30")
+    assert Decimal(points["2026-09-30", "INR"]["total_spent"]) == Decimal("3")
+    assert points["2026-09-02", "INR"]["purchase_count"] == 0
+    assert Decimal(points["2026-09-02", "INR"]["total_spent"]) == 0
+    assert {row["currency"] for row in data["points"]} == {"INR", "USD"}
+    assert sum(
+        Decimal(row["total_spent"]) for row in data["points"] if row["currency"] == "INR"
+    ) == Decimal("13.60")
+    precise = purchase(populated, grand_total="1.123456", purchased_at=START)
+    filtered = result(populated, "spending-trend", currency="INR", purchase_type="RETAIL")
+    assert Decimal(filtered["points"][0]["total_spent"]) == Decimal("10.30") + precise.grand_total
+
+
+def test_trend_months_keep_partial_boundaries_and_zero_fill(analytics):
+    purchase(
+        analytics, purchased_at=datetime(2026, 1, 14, 12, tzinfo=timezone.utc), grand_total="999"
+    )
+    purchase(
+        analytics,
+        purchased_at=datetime(2026, 1, 16, 12, tzinfo=timezone.utc),
+        grand_total="2.123456",
+    )
+    purchase(
+        analytics, purchased_at=datetime(2026, 4, 10, 12, tzinfo=timezone.utc), grand_total="3"
+    )
+    purchase(
+        analytics, purchased_at=datetime(2026, 4, 15, 12, tzinfo=timezone.utc), grand_total="999"
+    )
+    data = result(analytics, "spending-trend", start_date="2026-01-15", end_date="2026-04-15")
+    assert data["interval"] == "month"
+    assert [(row["date"], Decimal(row["total_spent"])) for row in data["points"]] == [
+        ("2026-01-01", Decimal("2.123456")),
+        ("2026-02-01", Decimal(0)),
+        ("2026-03-01", Decimal(0)),
+        ("2026-04-01", Decimal(3)),
+    ]
+
+
+def test_trend_empty_selected_currency_and_bounded_range(analytics):
+    assert result(analytics, "spending-trend")["points"] == []
+    points = result(analytics, "spending-trend", currency="CHF")["points"]
+    assert len(points) == 30
+    assert all(row["currency"] == "CHF" and Decimal(row["total_spent"]) == 0 for row in points)
+    response = analytics.client.get(
+        "/api/v1/analytics/spending-trend",
+        headers=ALICE,
+        params={"start_date": "2000-01-01", "end_date": "2026-01-01"},
+    )
+    assert response.status_code == 422
+
+
+def test_payment_distribution_uses_recorded_payments_and_purchase_filters(populated):
+    data = result(populated, "spending-by-payment")
+    assert data["provenance"] == "DERIVED"
+    rows = {row["method"]: row for row in data["groups"]}
+    assert set(rows) == {"CASH", "CARD"}
+    assert Decimal(rows["CASH"]["total_amount"]) == Decimal("6.20")
+    assert rows["CASH"]["payment_count"] == 2
+    assert Decimal(rows["CARD"]["total_amount"]) == Decimal("5.10")
+    assert Decimal(rows["CASH"]["share_of_total_percent"]) == Decimal("54.867257")
+    assert all(row["currency"] == "INR" for row in rows.values())
+    assert "reference" not in str(data) and "last4" not in str(data)
+    assert result(populated, "spending-by-payment", currency="USD")["groups"] == []
+    assert (
+        result(populated, "spending-by-payment", category_id=str(populated.grocery.id))["groups"]
+        == []
+    )
+    paid = result(populated, "spending-by-payment", payment_status="PAID")["groups"]
+    assert sum(Decimal(row["total_amount"]) for row in paid) == Decimal("10.30")
+
+
+@pytest.mark.parametrize(
+    "endpoint,key", [("spending-trend", "points"), ("spending-by-payment", "groups")]
+)
+def test_redesign_reads_enforce_auth_ownership_and_query_validation(populated, endpoint, key):
+    response = populated.client.get(f"/api/v1/analytics/{endpoint}", params=DATES)
+    assert response.status_code == 401
+    assert result(populated, endpoint, merchant_id=str(populated.private_store.id))[key] == []
+    assert result(populated, endpoint, category_id=str(uuid4()))[key] == []
+    for extra in ({"user_id": "bob"}, {"query": "store"}, {"start_date": "invalid"}):
+        response = populated.client.get(
+            f"/api/v1/analytics/{endpoint}", headers=ALICE, params={**DATES, **extra}
+        )
+        assert response.status_code == 422
+
+
 def test_empty_owner_has_no_fabricated_currency_or_groups(analytics):
     for endpoint in ("spending-summary", "period-comparison"):
         assert result(analytics, endpoint)["currencies"] == []

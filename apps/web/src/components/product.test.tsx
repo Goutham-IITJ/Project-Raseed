@@ -29,18 +29,21 @@ beforeEach(() => {
 it("shows overview loading, financial failure and retry without inventing totals", async () => {
   const summary = vi.spyOn(session.api, "summary").mockRejectedValueOnce(new Error("Temporarily offline")).mockResolvedValue({ period: { start_date: "2026-09-01", end_date: "2026-10-01", timezone: "Asia/Kolkata" }, currencies: [] });
   vi.spyOn(session.api, "comparison").mockResolvedValue({ period: { start_date: "2026-09-01", end_date: "2026-10-01", timezone: "Asia/Kolkata" }, comparison_period: { start_date: "2026-08-01", end_date: "2026-09-01", timezone: "Asia/Kolkata" }, currencies: [] });
+  vi.spyOn(session.api, "trend").mockResolvedValue({ period: { start_date: "2026-09-01", end_date: "2026-10-01", timezone: "Asia/Kolkata" }, interval: "day", points: [] });
+  vi.spyOn(session.api, "payments").mockResolvedValue({ period: { start_date: "2026-09-01", end_date: "2026-10-01", timezone: "Asia/Kolkata" }, groups: [] });
+  vi.spyOn(session.api, "lots").mockResolvedValue([]);
   show(<Overview />);
   expect(screen.getAllByRole("status").length).toBeGreaterThan(0);
   await screen.findAllByText("Temporarily offline");
   await userEvent.click(screen.getAllByRole("button", { name: /Try again/ })[0]);
-  await screen.findByText(/Your picture starts/);
+  await screen.findByText("No spending recorded");
   expect(summary).toHaveBeenCalledTimes(2);
 });
 
 it("submits purchase filters to the service and recovers receipt-list failures", async () => {
   vi.mocked(session.api.receipts).mockRejectedValueOnce(new Error("Offline")).mockResolvedValue([]);
   show(<Purchases />);
-  await screen.findByText("Your story starts with a receipt");
+  await screen.findByText("No purchases yet");
   await userEvent.type(screen.getByRole("searchbox"), " Rice ");
   await userEvent.click(screen.getByRole("button", { name: "Apply filters" }));
   await waitFor(() => expect(session.api.purchases).toHaveBeenLastCalledWith({ query: "Rice", limit: 20, offset: 0 }, expect.any(AbortSignal)));

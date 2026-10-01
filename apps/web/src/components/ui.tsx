@@ -3,8 +3,8 @@ import { useEffect, useId, useRef, type ReactNode } from "react";
 import Link from "next/link";
 import { Icon, type IconName } from "./icon";
 import { label } from "@/lib/format";
-export function PageHeader({ eyebrow, title, description, actions }: { eyebrow: string; title: string; description?: string; actions?: ReactNode }) {
-  return <header className="page-heading"><div><p className="eyebrow">{eyebrow}</p><h1>{title}</h1>{description && <p className="lede">{description}</p>}</div>{actions && <div className="heading-actions">{actions}</div>}</header>;
+export function PageHeader({ eyebrow, title, description, actions }: { eyebrow?: string; title: string; description?: string; actions?: ReactNode }) {
+  return <header className="page-heading"><div>{eyebrow && <p className="eyebrow">{eyebrow}</p>}<h1>{title}</h1>{description && <p className="lede">{description}</p>}</div>{actions && <div className="heading-actions">{actions}</div>}</header>;
 }
 export function Badge({ children, tone = "neutral" }: { children: ReactNode; tone?: "neutral" | "green" | "amber" | "red" }) { return <span className={"badge badge-" + tone}>{children}</span>; }
 export function Status({ value }: { value: string }) {

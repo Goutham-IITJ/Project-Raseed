@@ -94,7 +94,7 @@ persistence, conservative identity/pack comparison, freshness and assistant tool
 [the validation checkpoint](milestone-9-validation.md). No UI milestone is included.
 
 ## Milestone 10 — Product interface
-- responsive Overview, Purchases, Inventory, Insights, Assistant, Wallet and Settings
+- responsive Overview, Analysis, Purchases, Inventory, Insights, Assistant, Wallet and Settings
 - authenticated receipt upload, processing status and original receipt viewing
 - real API data, explicit provenance and honest loading/error/empty states
 - frontend interaction and desktop/mobile browser tests, lint, typecheck and build
@@ -102,6 +102,8 @@ persistence, conservative identity/pack comparison, freshness and assistant tool
 The approved M10 scope supersedes the original hardening slot. See
 [ADR-013](../decisions/ADR-013-product-interface.md) for the minimal additive read
 contracts. Legacy Streamlit and backend service boundaries remain unchanged.
+The completed visual redesign is recorded in
+[the redesign validation checkpoint](milestone-10-redesign-validation.md).
 
 ## Deferred — Hardening
 - security review

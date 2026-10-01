@@ -287,6 +287,8 @@ financial semantics and snapshot policy. There are no analytics write routes.
 | /analytics/spending-by-category | Period, filters, basis, and category groups |
 | /analytics/spending-by-merchant | Period, filters, and merchant groups |
 | /analytics/period-comparison | Current/comparison periods and changes per currency |
+| /analytics/spending-trend | Calendar buckets of spending per currency (M10) |
+| /analytics/spending-by-payment | Recorded payment amounts and shares by method/currency (M10) |
 | /purchases | Existing purchase list, with optional history filters |
 
 ### Shared period and purchase filters
@@ -397,6 +399,27 @@ preferences are read from one consistent PostgreSQL snapshot.
 
 Budget persistence, recurrence inference, and later insight features remain
 deferred. These analytics endpoints perform no provider calls.
+
+### Product analytics visualizations (M10 redesign)
+
+`GET /api/v1/analytics/spending-trend` and
+`GET /api/v1/analytics/spending-by-payment` accept the same typed period and
+purchase filters as spending-summary, without pagination. Both return the normal
+`data` envelope with `provenance: DERIVED`, `period`, and `filters`.
+
+Trend adds `interval` (`day` through 62 days, otherwise `month`) and `points`:
+`{date, currency, total_spent, purchase_count}`. Amounts are decimal strings.
+Calendar buckets use the user's timezone and zero-fill gaps per currency.
+An unfiltered empty period has no points; an explicit currency has zero-valued points
+for every bucket. Ranges over 3660 days return 422. Monthly bucket dates identify
+the first of the month, including a partial first/last month.
+
+Payment distribution adds `groups`:
+`{currency, method, total_amount, payment_count, share_of_total_percent}`.
+Amounts and non-null percentages are decimal strings. These are recorded payment
+amounts selected by the linked purchase date, not total spending or cash flow.
+No absent payment is inferred. Groups sort by currency, descending amount, method.
+Ownership, exact arithmetic, null ratios and snapshots follow ADR-008/ADR-013.
 
 ## Assistant (Milestone 6)
 

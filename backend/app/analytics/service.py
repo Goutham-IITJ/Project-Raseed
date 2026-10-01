@@ -1,6 +1,7 @@
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
+from typing import Literal
 
 from sqlalchemy.orm import Session
 
@@ -18,11 +19,16 @@ from backend.app.analytics.schemas import (
     MerchantGroup,
     MerchantQuery,
     MerchantView,
+    PaymentGroup,
+    PaymentView,
     SummaryView,
+    TrendPoint,
+    TrendView,
 )
 from backend.app.identity.context import CurrentUser
 from backend.app.identity.repositories import PreferencesRepository
 from backend.app.purchases.queries import (
+    InvalidQuery,
     PurchaseFilters,
     ResolvedPeriod,
     date_period,
@@ -103,6 +109,48 @@ class AnalyticsService:
                 filters=filters,
                 currencies=[summaries[currency] for currency in sorted(summaries)],
             )
+
+    def spending_trend(self, query: AnalyticsQuery) -> TrendView:
+        with self._snapshot() as timezone_name:
+            period = self._period(query, timezone_name)
+            filters = _filters(query)
+            days = (period.end_date - period.start_date).days
+            if days > 3660:
+                raise InvalidQuery
+            interval: Literal["day", "month"] = "day" if days <= 62 else "month"
+            rows = self._repository.trend(filters, period, interval)
+            currencies = sorted(
+                {row.currency for row in rows} | ({filters.currency} if filters.currency else set())
+            )
+            lookup = {(row.date, row.currency): row for row in rows}
+            day = period.start_date if interval == "day" else period.start_date.replace(day=1)
+            points = []
+            while day < period.end_date:
+                for currency in currencies:
+                    points.append(
+                        lookup.get((day, currency))
+                        or TrendPoint(
+                            date=day, currency=currency, total_spent=ZERO, purchase_count=0
+                        )
+                    )
+                day = (
+                    day + timedelta(days=1)
+                    if interval == "day"
+                    else (day.replace(day=28) + timedelta(days=4)).replace(day=1)
+                )
+            return TrendView(period=period, filters=filters, interval=interval, points=points)
+
+    def spending_by_payment(self, query: AnalyticsQuery) -> PaymentView:
+        with self._snapshot() as timezone_name:
+            period = self._period(query, timezone_name)
+            groups = [
+                PaymentGroup(
+                    **row.model_dump(exclude={"currency_total"}),
+                    share_of_total_percent=percentage(row.total_amount, row.currency_total),
+                )
+                for row in self._repository.payments(_filters(query), period)
+            ]
+            return PaymentView(period=period, filters=_filters(query), groups=groups)
 
     def spending_by_category(self, query: CategoryQuery) -> CategoryView:
         with self._snapshot() as timezone_name:

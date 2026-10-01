@@ -1,6 +1,7 @@
 from decimal import Decimal
+from typing import Literal
 
-from sqlalchemy import Integer, func, literal, select, text
+from sqlalchemy import Date, Integer, cast, func, literal, select, text
 
 from backend.app.analytics.money import ZERO
 from backend.app.analytics.schemas import (
@@ -8,7 +9,9 @@ from backend.app.analytics.schemas import (
     CategoryQuery,
     MerchantAmounts,
     MerchantQuery,
+    PaymentAmounts,
     PurchaseMetrics,
+    TrendPoint,
 )
 from backend.app.purchases.models import Category, LineItem, Merchant, Payment, Purchase
 from backend.app.purchases.queries import PurchaseFilters, ResolvedPeriod
@@ -27,7 +30,52 @@ class MerchantAggregate(MerchantAmounts):
     currency_total: Decimal
 
 
+class PaymentAggregate(PaymentAmounts):
+    currency_total: Decimal
+
+
 class AnalyticsRepository(OwnedRepository):
+    def trend(
+        self, filters: PurchaseFilters, period: ResolvedPeriod, interval: Literal["day", "month"]
+    ) -> list[TrendPoint]:
+        bucket = cast(
+            func.date_trunc(interval, func.timezone(period.timezone, Purchase.purchased_at)), Date
+        )
+        statement = (
+            select(
+                bucket.label("date"),
+                Purchase.currency,
+                func.sum(Purchase.grand_total).label("total_spent"),
+                func.count().label("purchase_count"),
+            )
+            .where(*purchase_conditions(self._current_user, filters, period))
+            .group_by(bucket, Purchase.currency)
+            .order_by(bucket, Purchase.currency)
+        )
+        return [
+            TrendPoint.model_validate(row) for row in self._session.execute(statement).mappings()
+        ]
+
+    def payments(self, filters: PurchaseFilters, period: ResolvedPeriod) -> list[PaymentAggregate]:
+        total = func.sum(Payment.amount)
+        statement = (
+            select(
+                Payment.currency,
+                Payment.method,
+                total.label("total_amount"),
+                func.count().label("payment_count"),
+                func.sum(total).over(partition_by=Payment.currency).label("currency_total"),
+            )
+            .join(Purchase, Payment.purchase_id == Purchase.id)
+            .where(*purchase_conditions(self._current_user, filters, period))
+            .group_by(Payment.currency, Payment.method)
+            .order_by(Payment.currency, total.desc(), Payment.method)
+        )
+        return [
+            PaymentAggregate.model_validate(row)
+            for row in self._session.execute(statement).mappings()
+        ]
+
     def start_snapshot(self) -> None:
         # Fixed transaction policy, never user/model SQL. Must precede the first read.
         self._session.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"))

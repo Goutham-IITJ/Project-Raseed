@@ -9,7 +9,9 @@ export interface Summary { period: Period; currencies: { currency: string; total
 export interface Comparison { period: Period; comparison_period: Period; currencies: { currency: string; current_total: Decimal; comparison_total: Decimal; percentage_change: Decimal | null; absolute_change: Decimal }[] }
 export interface CategoryGroup { category_id: string | null; category_name: string | null; currency: string; total_amount: Decimal | null; share_of_known_total_percent: Decimal | null; purchase_count: number }
 export interface Categories { groups: CategoryGroup[]; has_more: boolean }
-export interface Merchants { groups: { merchant_id: string | null; merchant_name: string | null; currency: string }[]; has_more: boolean }
+export interface Merchants { groups: { merchant_id: string | null; merchant_name: string | null; currency: string; total_spent: Decimal; purchase_count: number; share_of_total_percent: Decimal | null }[]; has_more: boolean }
+export interface Trend { period: Period; interval: "day" | "month"; points: { date: string; currency: string; total_spent: Decimal; purchase_count: number }[] }
+export interface PaymentDistribution { period: Period; groups: { currency: string; method: string; total_amount: Decimal; payment_count: number; share_of_total_percent: Decimal | null }[] }
 export interface InventoryItem { id: string; name: string; unit: string; quantity_remaining: Decimal; lot_count: number }
 export interface Lot { id: string; item_id: string; purchase_id: string; line_item_id: string; name: string; unit: string; quantity_acquired: Decimal; quantity_remaining: Decimal; acquired_at: string; version: number; expiry: { date: string | null; source: string; provenance: string; confidence: Decimal | null; status: string } }
 export interface InventoryEvent { id: string; sequence: number; event_type: string; quantity_delta: Decimal; reason: string; source: string; created_at: string }

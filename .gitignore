@@ -23,6 +23,8 @@ dist/
 !**/.env.example
 **/node_modules/
 **/.next/
+**/.next-product-test/
+**/.next-demo-test/
 **/coverage/
 *.tsbuildinfo
 *.log

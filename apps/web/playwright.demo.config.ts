@@ -14,6 +14,7 @@ export const backendEnv = {
 export default defineConfig({
   globalSetup: "./demo-e2e/setup.ts",
   testDir: "./demo-e2e", fullyParallel: false, workers: 1, retries: 0, reporter: "list",
+  outputDir: "./test-results/demo",
   use: { baseURL: "http://127.0.0.1:3101", trace: "retain-on-failure" },
   projects: [
     { name: "demo-desktop", use: { ...devices["Desktop Chrome"] } },
@@ -22,6 +23,7 @@ export default defineConfig({
   webServer: [
     { command: `"${python}" -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8101 --no-proxy-headers`, cwd: root, url: "http://127.0.0.1:8101/health", timeout: 60000, env: backendEnv },
     { command: "npm run dev -- --hostname 127.0.0.1 --port 3101", url: "http://127.0.0.1:3101", timeout: 120000, env: {
+      RASEED_WEB_TEST: "demo",
       NEXT_PUBLIC_API_BASE_URL: "http://127.0.0.1:8101", NEXT_PUBLIC_LOCAL_DEMO: "true",
       NEXT_PUBLIC_FIREBASE_API_KEY: "", NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: "",
       NEXT_PUBLIC_FIREBASE_PROJECT_ID: "", NEXT_PUBLIC_FIREBASE_APP_ID: "",

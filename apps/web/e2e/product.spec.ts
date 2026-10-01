@@ -36,7 +36,9 @@ async function prepare(page: Page) {
     if (path === "/receipts/receipt-1") return json({ ...receipt, status: "PROCESSED", purchase_id: purchase.id });
     if (path === "/receipts/receipt-1/file") return route.fulfill({ contentType: "image/png", body: png });
     if (path === "/analytics/spending-summary") return json({ period, currencies: [{ currency: "INR", total_spent: "1234.560001", purchase_count: 1, average_purchase: "1234.560001" }, { currency: "USD", total_spent: "25.00", purchase_count: 1, average_purchase: "25.00" }] });
-    if (path === "/analytics/period-comparison") return json({ period, comparison_period: period, currencies: [{ currency: "INR", percentage_change: "20.000000" }] });
+    if (path === "/analytics/spending-trend") return json({ period, interval: "day", points: [{ date: "2026-09-28", currency: "INR", total_spent: purchase.grand_total, purchase_count: 1 }, { date: "2026-09-29", currency: "INR", total_spent: "0", purchase_count: 0 }] });
+    if (path === "/analytics/spending-by-payment") return json({ period, groups: [] });
+    if (path === "/analytics/period-comparison") return json({ period, comparison_period: period, currencies: [{ currency: "INR", current_total: "1234.560001", comparison_total: "1028.80", absolute_change: "205.760001", percentage_change: "20.000000" }] });
     if (path === "/analytics/spending-by-category" || path === "/analytics/spending-by-merchant") return json({ groups: [], has_more: false });
     if (path === "/inventory/items") return json([{ id: "item-1", name: "Rice", unit: "kg", quantity_remaining: remaining, lot_count: 1 }]);
     if (path === "/inventory/items/item-1") return json({ id: "item-1", name: "Rice", unit: "kg", quantity_remaining: remaining, lot_count: 1 });
@@ -63,10 +65,12 @@ test.beforeEach(async ({ page }) => { await prepare(page); });
 
 test("all product routes fit the viewport and mobile navigation restores focus", async ({ page, isMobile }) => {
   const errors: string[] = []; page.on("pageerror", error => errors.push(error.message));
-  for (const [path, heading] of [["/", "Hello, Alice."], ["/purchases", "Every purchase, remembered."], ["/inventory", "Know what you have."], ["/insights", "Good things to know."], ["/assistant", "A little help remembering."], ["/wallet", "Your purchases, to go."], ["/settings", "Your space. Your preferences."]]) {
+  for (const [path, heading] of [["/", "Hello, Alice."], ["/analysis", "Analysis"], ["/purchases", "Purchases"], ["/inventory", "Inventory"], ["/insights", "Insights"], ["/assistant", "Assistant"], ["/wallet", "Wallet"], ["/settings", "Settings"]]) {
     await page.goto(path);
-    await expect(page.getByRole("heading", { name: heading })).toBeVisible();
+    await expect(page.getByRole("heading", { name: heading, level: 1, exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Add Receipt", exact: true }).first()).toBeVisible();
+    await expect(page.getByRole("status", { name: "Loading", exact: true })).toHaveCount(0);
+    await expect(page.locator(".error-state")).toHaveCount(0);
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   }
   if (isMobile) {
@@ -77,7 +81,7 @@ test("all product routes fit the viewport and mobile navigation restores focus",
     await expect(toggle).toBeFocused();
     await toggle.click();
     await page.getByRole("dialog").getByRole("link", { name: "Inventory", exact: true }).click();
-    await expect(page.getByRole("heading", { name: "Know what you have." })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Inventory", level: 1, exact: true })).toBeVisible();
     await expect(page.getByRole("dialog")).toHaveCount(0);
   }
   expect(errors).toEqual([]);
@@ -95,6 +99,28 @@ test("receipt capture leads to purchase details and an authenticated original", 
   await expect(page.getByRole("img", { name: "Your original uploaded receipt" })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("button", { name: "View receipt" })).toBeFocused();
+});
+
+test("analysis exposes exact chart data and applies custom dates through the API", async ({ page }) => {
+  await page.goto("/analysis");
+  await expect(page.getByRole("heading", { name: "Spending over time" })).toBeVisible();
+  const chart = page.getByRole("group", { name: "Spending over time" });
+  const point = chart.getByRole("button").first();
+  await point.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(chart.getByRole("button").last()).toBeFocused();
+  await page.getByText("View chart data", { exact: true }).click();
+  await expect(page.getByRole("table").getByRole("cell", { name: "₹1,234.560001", exact: true })).toBeVisible();
+  await page.getByLabel("Time period").selectOption("custom");
+  await expect(page.getByText(/Choose a start and end date/)).toBeVisible();
+  await page.getByLabel("From", { exact: true }).fill("2026-08-01");
+  await page.getByLabel("Before (exclusive)", { exact: true }).fill("2026-09-01");
+  const request = page.waitForRequest(req => req.url().includes("spending-trend") && new URL(req.url()).searchParams.get("start_date") === "2026-08-01");
+  await page.getByRole("button", { name: "Apply dates" }).click();
+  const query = new URL((await request).url()).searchParams;
+  expect(query.get("end_date")).toBe("2026-09-01");
+  expect(query.has("period")).toBe(false);
+  await expect(page.getByRole("heading", { name: "How you paid" })).toBeVisible();
 });
 
 test("inventory, insight and Wallet actions reflect service state", async ({ page }) => {
@@ -139,6 +165,6 @@ test("purchase failures recover into honest empty states at 320px", async ({ pag
   await expect(page.getByRole("alert").filter({ hasText: /complete that request/ })).toBeVisible();
   fail = false;
   await page.getByRole("button", { name: /Try again/ }).click();
-  await expect(page.getByText("Your story starts with a receipt")).toBeVisible();
+  await expect(page.getByText("No purchases yet")).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

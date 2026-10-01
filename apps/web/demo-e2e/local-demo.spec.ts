@@ -7,9 +7,9 @@ test("all routes use seeded domain records without Firebase or external calls", 
     if (!new URL(request.url()).hostname.match(/^(127\.0\.0\.1|localhost)$/)) external.push(request.url());
   });
   page.on("pageerror", error => errors.push(error.message));
-  for (const [path, title] of [["/", "Hello, Alex."], ["/purchases", "Every purchase, remembered."], ["/inventory", "Know what you have."], ["/insights", "Good things to know."], ["/assistant", "A little help remembering."], ["/wallet", "Your purchases, to go."], ["/settings", "Your space. Your preferences."]]) {
+  for (const [path, title] of [["/", "Hello, Alex."], ["/analysis", "Analysis"], ["/purchases", "Purchases"], ["/inventory", "Inventory"], ["/insights", "Insights"], ["/assistant", "Assistant"], ["/wallet", "Wallet"], ["/settings", "Settings"]]) {
     await page.goto(path);
-    await expect(page.getByRole("heading", { name: title })).toBeVisible();
+    await expect(page.getByRole("heading", { name: title, level: 1, exact: true })).toBeVisible();
     await expect(page.getByText("Local demo · Synthetic data", { exact: true })).toBeVisible();
     await expect(page.getByRole("status", { name: "Loading", exact: true })).toHaveCount(0);
     await expect(page.locator(".error-state")).toHaveCount(0);
@@ -17,6 +17,7 @@ test("all routes use seeded domain records without Firebase or external calls", 
   }
   await expect(page.getByText("demo@example.test")).toBeVisible();
   await page.goto("/");
+  await page.getByLabel("Overview period").selectOption("this_year");
   await expect(page.locator(".hero-amount")).toBeVisible();
   await page.screenshot({ path: `test-results/${isMobile ? "mobile" : "desktop"}-local-demo.png`, fullPage: true });
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
@@ -34,7 +35,7 @@ test("purchase originals, inventory evidence, saved chat and Wallet examples are
   await expect(page.getByRole("img", { name: "Your original uploaded receipt" })).toBeVisible();
   await page.keyboard.press("Escape");
   await page.goto("/inventory");
-  await page.getByRole("link", { name: /Fresh spinach/ }).click();
+  await page.getByRole("link", { name: /Fresh spinach/ }).last().click();
   await expect(page.getByText(/Model estimate/)).toBeVisible();
   await page.goto("/assistant");
   await page.getByRole("link", { name: "Demo · Grocery purchase evidence" }).click();

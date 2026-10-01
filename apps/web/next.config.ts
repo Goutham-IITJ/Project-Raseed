@@ -4,6 +4,8 @@ import { PHASE_DEVELOPMENT_SERVER } from "next/constants";
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // Browser suites own their output and can run beside the local demo.
+  distDir: process.env.RASEED_WEB_TEST === "product" ? ".next-product-test" : process.env.RASEED_WEB_TEST === "demo" ? ".next-demo-test" : ".next",
 };
 
 export default function config(phase: string): NextConfig {

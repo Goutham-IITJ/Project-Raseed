@@ -11,7 +11,9 @@ from backend.app.analytics.schemas import (
     ComparisonResponse,
     MerchantQuery,
     MerchantResponse,
+    PaymentResponse,
     SummaryResponse,
+    TrendResponse,
 )
 from backend.app.analytics.service import AnalyticsService
 from backend.app.api.dependencies import get_current_user, get_session
@@ -28,6 +30,18 @@ def get_analytics_service(
 
 
 Service = Annotated[AnalyticsService, Depends(get_analytics_service)]
+
+
+@router.get("/spending-trend", response_model=TrendResponse)
+def spending_trend(service: Service, query: Annotated[AnalyticsQuery, Query()]) -> TrendResponse:
+    return TrendResponse(data=service.spending_trend(query))
+
+
+@router.get("/spending-by-payment", response_model=PaymentResponse)
+def spending_by_payment(
+    service: Service, query: Annotated[AnalyticsQuery, Query()]
+) -> PaymentResponse:
+    return PaymentResponse(data=service.spending_by_payment(query))
 
 
 @router.get("/spending-summary", response_model=SummaryResponse)

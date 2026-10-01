@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 const paths = {
+  analysis: "M3 3v18h18 M7 15l4-6 4 3 6-8",
   overview: "M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z",
   receipt: "M6 3h12v19l-3-2-3 2-3-2-3 2V3Z M9 7h6 M9 11h6 M9 15h3",
   inventory: "m3 7 9-4 9 4v12l-9 3-9-3V7Z m0 0 9 4 9-4 M12 11v11 M7 5l10 4",
