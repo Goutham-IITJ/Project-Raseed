@@ -3,6 +3,7 @@ from unittest.mock import Mock
 
 import pytest
 from google.api_core.exceptions import Forbidden, NotFound
+from requests.exceptions import ConnectionError, Timeout
 
 from backend.app.ingestion.errors import StorageUnavailable
 from backend.app.ingestion.storage import CloudStorageProvider, LocalStorageProvider
@@ -86,3 +87,25 @@ def test_gcs_rejects_foreign_bucket_and_hides_sdk_errors():
         provider.put_object(b"receipt", "image/png")
     blob.delete.side_effect = NotFound("missing")
     provider.delete_object("gs://private-bucket/receipts/" + "a" * 32)
+
+
+def test_gcs_emulator_override_fails_closed(monkeypatch):
+    monkeypatch.setenv("STORAGE_EMULATOR_HOST", "http://127.0.0.1:4443")
+    provider, bucket, _ = cloud_provider()
+    with pytest.raises(StorageUnavailable):
+        provider.put_object(b"receipt", "image/png")
+    bucket.reload.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "failure", [ConnectionError("secret"), Timeout("secret"), ValueError("ADC")]
+)
+@pytest.mark.parametrize("operation", ["put", "get", "delete"])
+def test_gcs_transport_and_configuration_failures_stay_safe(failure, operation):
+    provider, bucket, _ = cloud_provider()
+    bucket.reload.side_effect = failure
+    with pytest.raises(StorageUnavailable):
+        if operation == "put":
+            provider.put_object(b"receipt", "image/png")
+        else:
+            getattr(provider, operation + "_object")("gs://private-bucket/receipts/" + "a" * 32)

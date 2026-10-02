@@ -31,6 +31,7 @@ from backend.app.identity.firebase import FirebaseTokenVerifier
 from backend.app.ingestion.factory import make_storage
 from backend.app.ingestion.storage import ObjectStorage
 from backend.app.purchases.errors import DomainError
+from backend.app.readiness import is_ready
 from backend.app.wallet.google import GoogleWalletProvider
 from backend.app.wallet.provider import WalletProvider
 
@@ -162,6 +163,15 @@ def create_app(
     @application.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @application.get("/ready")
+    def ready() -> JSONResponse:
+        available = is_ready(config, factory)
+        return JSONResponse(
+            {"status": "ready" if available else "not_ready"},
+            status_code=200 if available else 503,
+            headers={"Cache-Control": "no-store"},
+        )
 
     application.include_router(router)
     application.include_router(purchase_router)

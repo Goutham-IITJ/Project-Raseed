@@ -77,3 +77,10 @@ services. See [ADR-013](decisions/ADR-013-product-interface.md) for the minimal
 read contracts and [the M10 checkpoint](implementation/milestone-10-validation.md)
 for delivered screens and validation. Notifications, budgets, recurrence,
 financial mutation tools and operational hardening remain deferred.
+
+Milestone 11 verifies the existing provider boundaries and complete application
+flow with deterministic tests, and adds local readiness/configuration safeguards.
+See [the M11 checkpoint](implementation/milestone-11-validation.md),
+[live provider setup](implementation/provider-verification.md) and
+[ADR-015](decisions/ADR-015-provider-verification.md). Live account verification
+still requires the documented credentials and interactive Google sign-in.

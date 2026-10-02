@@ -11,7 +11,7 @@ const config = {
 let authPromise: Promise<Auth> | undefined;
 
 export function getFirebaseAuth(): Promise<Auth> {
-  if (!Object.values(config).every(Boolean)) {
+  if (!Object.values(config).every(value => value?.trim() && !/^(your-|replace-me|example-project)/i.test(value.trim()))) {
     return Promise.reject(new Error("Sign-in is not configured. Please try again later."));
   }
   if (!authPromise) {

@@ -74,11 +74,19 @@ committed atomically. Concurrent partial updates preserve unrelated fields.
 - 500 `internal_error`: unexpected failure, without internal details or token contents.
 - Other HTTP errors use this envelope (for example 404 `http_error`).
 
-## Operational endpoint
+## Operational endpoints
 
 `GET /health` is an unauthenticated liveness check returning `{"status":"ok"}`.
-It does not provision users or imply database/Firebase readiness. API docs are
-available at `/docs`. No other product API is implemented in Milestones 0–1.
+It does not provision users or imply database/Firebase readiness.
+
+`GET /ready` is an unauthenticated local readiness check. It returns 200 with
+`{"status":"ready"}` when PostgreSQL responds, its Alembic revision matches this
+checkout and Firebase project configuration is present (or guarded local demo is
+enabled). Otherwise it returns 503 with `{"status":"not_ready"}`. Both responses
+use `Cache-Control: no-store` and expose no configuration or failure details.
+Neither endpoint calls an external provider. Readiness does not verify ADC,
+Google Sign-In, provider permissions, worker progress or model availability; those
+require separate workflow verification. See ADR-015. API docs remain at `/docs`.
 
 ## Receipt binary upload (Milestone 3)
 

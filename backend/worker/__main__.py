@@ -83,10 +83,12 @@ def main() -> None:
             except SQLAlchemyError:
                 logging.error("Worker database unavailable; durable jobs remain pending.")
                 if args.once:
-                    raise
+                    parser.exit(1, "Worker database unavailable; durable jobs remain pending.\n")
             if args.once:
                 break
             time.sleep(settings.worker_poll_seconds)
+    except SQLAlchemyError:
+        parser.exit(1, "Worker database unavailable; durable jobs remain pending.\n")
     except KeyboardInterrupt:
         pass
     finally:

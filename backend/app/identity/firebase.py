@@ -8,6 +8,7 @@ from firebase_admin import auth
 from firebase_admin.exceptions import FirebaseError
 from google.auth.exceptions import GoogleAuthError
 
+from backend.app.config import configured
 from backend.app.identity.context import (
     InvalidToken,
     VerificationUnavailable,
@@ -24,7 +25,7 @@ class FirebaseTokenVerifier:
         self._lock = Lock()
 
     def _get_app(self) -> Any:
-        if not self._project_id or os.getenv("FIREBASE_AUTH_EMULATOR_HOST"):
+        if not configured(self._project_id) or os.getenv("FIREBASE_AUTH_EMULATOR_HOST"):
             raise VerificationUnavailable("Firebase project configuration is required")
         with self._lock:
             if self._app is None:

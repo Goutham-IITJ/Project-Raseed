@@ -232,6 +232,38 @@ def test_gemini_missing_configuration_fails_without_network():
     assert failure.value.code == "provider_configuration" and not failure.value.retryable
 
 
+def test_gemini_stops_reading_oversized_response(monkeypatch):
+    monkeypatch.setattr("backend.app.ingestion.gemini.MAX_RESPONSE_BYTES", 100)
+    chunks_read = []
+
+    class Stream(httpx.SyncByteStream):
+        def __iter__(self):
+            for index in range(10):
+                chunks_read.append(index)
+                yield b"x" * 60
+
+    adapter = GeminiReceiptExtractor(
+        "fixture",
+        "model",
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, stream=Stream())),
+    )
+    with pytest.raises(ProcessingError) as error:
+        adapter.extract(b"receipt", "image/png", SCHEMA_VERSION)
+    assert error.value.code == "provider_response_invalid" and not error.value.retryable
+    assert chunks_read == [0, 1]
+
+
+def test_gemini_bounds_total_response_read_time(monkeypatch):
+    ticks = iter([0, 46])
+    monkeypatch.setattr("backend.app.ingestion.gemini.time.monotonic", lambda: next(ticks))
+    adapter = GeminiReceiptExtractor(
+        "fixture", "model", transport=httpx.MockTransport(lambda _: httpx.Response(200, text="x"))
+    )
+    with pytest.raises(ProcessingError) as error:
+        adapter.extract(b"receipt", "image/png", SCHEMA_VERSION)
+    assert error.value.code == "provider_timeout" and error.value.retryable
+
+
 def test_lifecycle_rejects_skipping_validation_or_reprocessing_success():
     receipt = Receipt(status="UPLOADED")
     with pytest.raises(ValueError):

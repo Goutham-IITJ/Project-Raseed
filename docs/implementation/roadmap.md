@@ -105,6 +105,18 @@ contracts. Legacy Streamlit and backend service boundaries remain unchanged.
 The completed visual redesign is recorded in
 [the redesign validation checkpoint](milestone-10-redesign-validation.md).
 
+## Milestone 11 — Real provider integration and verification
+
+- retain the current product interface and existing provider adapters
+- verify live Firebase, Gemini, assistant, GCS and Wallet where credentials exist
+- exercise the complete receipt-to-Wallet path with deterministic provider boundaries
+- validate configuration, readiness, worker recovery, ownership and secret handling
+- record live-account prerequisites and distinguish mocks from external acceptance
+
+See [the M11 checkpoint](milestone-11-validation.md),
+[provider setup and verification](provider-verification.md) and
+[ADR-015](../decisions/ADR-015-provider-verification.md).
+
 ## Deferred — Hardening
 - security review
 - evaluation datasets

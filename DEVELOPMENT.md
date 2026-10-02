@@ -68,6 +68,14 @@ without Firebase or PostgreSQL. Authenticated endpoints fail closed when Firebas
 is unavailable. Without Firebase configuration the web app shows an unavailable
 sign-in state; it does not simulate a logged-in account.
 
+`GET /ready` separately checks local Firebase project configuration and the
+database migration revision, returning a safe 503 when unavailable. It makes no
+provider call and does not attest to ADC, sign-in, worker or provider health.
+Example Firebase placeholders are treated as unconfigured by the browser and API.
+For real provider setup, exact manual verification steps and the current M11
+limitations, see [the provider verification runbook](docs/implementation/provider-verification.md)
+and [M11 results](docs/implementation/milestone-11-validation.md).
+
 The worker polls durable RECEIPT_UPLOADED outbox events in a separate process.
 `uv run python -m backend.worker --once` dispatches one ready batch and exits.
 PostgreSQL is the only Compose service required now.

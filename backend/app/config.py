@@ -10,8 +10,17 @@ from sqlalchemy.engine import make_url
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def configured(value: str) -> bool:
+    """Empty example values are configuration gaps, not usable credentials."""
+    return bool(value.strip()) and not value.strip().lower().startswith(
+        ("your-", "replace-me", "example-project")
+    )
+
+
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=ROOT / ".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=ROOT / ".env", extra="ignore", hide_input_in_errors=True
+    )
 
     app_env: Literal["development", "test", "production"] = "production"
     local_demo: bool = False
@@ -51,6 +60,15 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def demo_is_local_only(self) -> "Settings":
+        if self.app_env == "production":
+            for origin in [*self.cors_origins, *self.wallet_origins]:
+                parsed = urlsplit(origin)
+                if parsed.scheme != "https" and parsed.hostname not in {
+                    "localhost",
+                    "127.0.0.1",
+                    "::1",
+                }:
+                    raise ValueError("Production remote web origins require HTTPS")
         if self.local_demo:
             database = make_url(self.database_url)
             if (
@@ -89,29 +107,28 @@ class Settings(BaseSettings):
             raise ValueError("V2 requires PostgreSQL with the psycopg driver")
         return value
 
-    @field_validator("cors_origins")
+    @field_validator("cors_origins", "wallet_origins")
     @classmethod
     def explicit_origins(cls, value: list[str]) -> list[str]:
-        if any(origin == "*" or not origin.startswith(("http://", "https://")) for origin in value):
-            raise ValueError("CORS origins must be explicit HTTP(S) origins")
-        return value
-
-    @field_validator("wallet_origins")
-    @classmethod
-    def wallet_web_origins(cls, value: list[str]) -> list[str]:
-        from urllib.parse import urlsplit
-
         for origin in value:
             parsed = urlsplit(origin)
+            # Accessing port also validates malformed/out-of-range ports.
+            port = parsed.port
             if (
                 parsed.scheme not in {"http", "https"}
                 or not parsed.hostname
-                or parsed.username
-                or parsed.password
+                or parsed.username is not None
+                or parsed.password is not None
                 or parsed.path
                 or parsed.query
                 or parsed.fragment
                 or "*" in origin
+                or "?" in origin
+                or "#" in origin
+                or "\\" in origin
+                or any(char.isspace() or ord(char) < 32 for char in origin)
+                or port == 0
+                or parsed.netloc.endswith(":")
             ):
-                raise ValueError("Wallet origins must be explicit HTTP(S) origins without paths")
+                raise ValueError("Web origins must be explicit HTTP(S) origins without paths")
         return value

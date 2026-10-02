@@ -9,6 +9,7 @@ from uuid import uuid4
 from google.api_core.exceptions import GoogleAPIError, NotFound
 from google.auth.exceptions import GoogleAuthError
 from google.cloud import storage
+from requests.exceptions import RequestException
 
 from backend.app.ingestion.errors import StorageUnavailable
 
@@ -96,7 +97,7 @@ class CloudStorageProvider:
         self._client = client
 
     def _bucket(self) -> Bucket:
-        if not self._bucket_name:
+        if not self._bucket_name or os.getenv("STORAGE_EMULATOR_HOST"):
             raise StorageUnavailable
         if self._client is None:
             self._client = cast(GCSClient, storage.Client())
@@ -128,7 +129,7 @@ class CloudStorageProvider:
                 timeout=30,
                 retry=None,
             )
-        except (GoogleAPIError, GoogleAuthError) as exc:
+        except (GoogleAPIError, GoogleAuthError, RequestException, OSError, ValueError) as exc:
             raise StorageUnavailable from exc
         return reference
 
@@ -136,7 +137,7 @@ class CloudStorageProvider:
         key = self._key(reference)
         try:
             return self._bucket().blob(key).download_as_bytes(timeout=30, retry=None)
-        except (GoogleAPIError, GoogleAuthError) as exc:
+        except (GoogleAPIError, GoogleAuthError, RequestException, OSError, ValueError) as exc:
             raise StorageUnavailable from exc
 
     def delete_object(self, reference: str) -> None:
@@ -145,5 +146,5 @@ class CloudStorageProvider:
             self._bucket().blob(key).delete(timeout=30, retry=None)
         except NotFound:
             return
-        except (GoogleAPIError, GoogleAuthError) as exc:
+        except (GoogleAPIError, GoogleAuthError, RequestException, OSError, ValueError) as exc:
             raise StorageUnavailable from exc

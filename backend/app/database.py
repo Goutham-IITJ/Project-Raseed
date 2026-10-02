@@ -19,6 +19,7 @@ def make_engine(url: str) -> Engine:
     return create_engine(
         url,
         pool_pre_ping=True,
+        pool_timeout=5,
         isolation_level="READ COMMITTED",
         connect_args={"connect_timeout": 5},
     )
