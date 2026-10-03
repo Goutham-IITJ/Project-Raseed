@@ -1,10 +1,11 @@
 import os
+from pathlib import Path
 from threading import Lock
 from typing import Any
 from uuid import uuid4
 
 import firebase_admin
-from firebase_admin import auth
+from firebase_admin import auth, credentials
 from firebase_admin.exceptions import FirebaseError
 from google.auth.exceptions import GoogleAuthError
 
@@ -19,8 +20,9 @@ from backend.app.identity.context import (
 class FirebaseTokenVerifier:
     """The only production token adapter. No decoding-only or emulator fallback."""
 
-    def __init__(self, project_id: str) -> None:
+    def __init__(self, project_id: str, credentials_path: Path | None = None) -> None:
         self._project_id = project_id
+        self._credentials_path = credentials_path
         self._app: Any = None
         self._lock = Lock()
 
@@ -29,9 +31,19 @@ class FirebaseTokenVerifier:
             raise VerificationUnavailable("Firebase project configuration is required")
         with self._lock:
             if self._app is None:
+                # An explicit local key takes precedence; None preserves managed/default ADC.
+                credential = None
+                if self._credentials_path is not None:
+                    try:
+                        credential = credentials.Certificate(str(self._credentials_path))
+                    except (OSError, ValueError, TypeError, AttributeError) as exc:
+                        # The SDK also assumes parsed JSON is an object with typed fields.
+                        raise VerificationUnavailable from exc
                 # An adapter owns its app; no dependence on an implicitly configured default app.
                 self._app = firebase_admin.initialize_app(
-                    options={"projectId": self._project_id}, name=f"raseed-{uuid4()}"
+                    credential=credential,
+                    options={"projectId": self._project_id},
+                    name=f"raseed-{uuid4()}",
                 )
         return self._app
 

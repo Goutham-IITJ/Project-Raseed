@@ -19,7 +19,7 @@ def configured(value: str) -> bool:
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=ROOT / ".env", extra="ignore", hide_input_in_errors=True
+        env_file=ROOT / ".env", env_file_encoding="utf-8", extra="ignore", hide_input_in_errors=True
     )
 
     app_env: Literal["development", "test", "production"] = "production"
@@ -27,6 +27,7 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+psycopg://raseed:raseed_local@localhost:5432/raseed"
     firebase_project_id: str = ""
+    firebase_admin_credentials_path: Path | None = None
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
     storage_provider: Literal["local", "gcs"] = "local"
     local_storage_path: Path = ROOT / ".local" / "receipts"
@@ -57,6 +58,12 @@ class Settings(BaseSettings):
     market_ebay_token: SecretStr = SecretStr("")
     market_ebay_marketplace: Literal["EBAY_US", "EBAY_GB", "EBAY_DE", "EBAY_AU"] = "EBAY_US"
     market_request_timeout_seconds: float = Field(default=10, gt=0, le=20)
+
+    @field_validator("firebase_admin_credentials_path", mode="before")
+    @classmethod
+    def empty_firebase_credentials_path(cls, value: object) -> object:
+        # A blank .env example value keeps Firebase Admin on ADC.
+        return None if isinstance(value, str) and not value.strip() else value
 
     @model_validator(mode="after")
     def demo_is_local_only(self) -> "Settings":
