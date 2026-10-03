@@ -37,10 +37,35 @@ Set the backend `FIREBASE_PROJECT_ID` in `.env`. Copy the Firebase Console web
 configuration into `apps/web/.env.local`. Both sides must use the same project.
 `NEXT_PUBLIC_*` Firebase values are public web configuration, not Admin secrets.
 
-Configure Application Default Credentials for Firebase Admin, either using a
-managed workload identity, a local ADC login with the necessary project access,
-or `GOOGLE_APPLICATION_CREDENTIALS` pointing to a service-account file **outside
-this repository**. Never paste Admin JSON or private keys into frontend variables.
+For local or non-Google development, store these backend settings in the ignored
+root `.env` (replace the examples with your project and an absolute path):
+
+```dotenv
+FIREBASE_PROJECT_ID=your-firebase-project-id
+FIREBASE_ADMIN_CREDENTIALS_PATH="C:/private/firebase-service-account.json"
+```
+
+Keep the actual service-account JSON **outside this repository**. On macOS/Linux,
+use an absolute path such as `/home/you/.config/raseed/firebase-service-account.json`.
+Quote paths containing spaces; forward slashes work on Windows. The backend loads
+the root `.env` automatically at startup, independently of the working directory;
+no shell exports or `uv run --env-file` are needed for these settings. Restart the
+backend after changing them. Process environment values override `.env` values.
+
+The configured path takes precedence for Firebase Admin only. Leave
+`FIREBASE_ADMIN_CREDENTIALS_PATH` unset or blank in deployed Google environments
+to preserve Application Default Credentials (ADC), including managed workload
+identity. Local ADC login and an existing shell `GOOGLE_APPLICATION_CREDENTIALS`
+also continue to work when the explicit path is absent. A
+`GOOGLE_APPLICATION_CREDENTIALS` entry in `.env` alone is not exported to the Google
+SDK; use the explicit Firebase setting above for persistent local setup. GCS and
+Wallet retain their separate ADC configuration.
+
+Admin initialization remains lazy: startup makes no Google request. An unreadable
+or invalid configured file causes authenticated requests to fail with a safe
+`authentication_unavailable` (503), without falling back to another identity.
+Never commit `.env` or service-account JSON, or paste Admin JSON/private keys into
+source code or frontend variables.
 The backend verifies revocation/disabled-user status, so the credential needs
 Firebase Authentication user-read permission. `FIREBASE_AUTH_EMULATOR_HOST` is
 deliberately rejected; there is no runtime authentication bypass.
