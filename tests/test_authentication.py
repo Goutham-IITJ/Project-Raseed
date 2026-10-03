@@ -1,13 +1,16 @@
+import os
 from unittest.mock import Mock
 
 import pytest
 from fastapi.testclient import TestClient
-from firebase_admin import auth
+from firebase_admin import auth, credentials
 from firebase_admin.exceptions import UnavailableError
 from google.auth.exceptions import DefaultCredentialsError
 
+from backend.app.config import Settings
 from backend.app.identity.context import InvalidToken, VerificationUnavailable, VerifiedIdentity
 from backend.app.identity.firebase import FirebaseTokenVerifier
+from backend.app.main import create_app
 
 
 @pytest.mark.parametrize(
@@ -63,6 +66,92 @@ def test_firebase_adapter_delegates_real_verification(monkeypatch):
     result = verifier.verify("opaque-token")
     assert result == VerifiedIdentity("verified-uid", "a@example.com", "Alice")
     verify.assert_called_once_with("opaque-token", app=application, check_revoked=True)
+
+
+def test_explicit_firebase_credentials_take_precedence_over_adc(monkeypatch, tmp_path):
+    monkeypatch.delenv("FIREBASE_AUTH_EMULATOR_HOST", raising=False)
+    monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", "existing-adc.json")
+    adc = Mock(side_effect=AssertionError("Explicit Firebase credentials must take precedence"))
+    monkeypatch.setattr(credentials, "ApplicationDefault", adc)
+    certificate = Mock(return_value=Mock(spec=credentials.Base))
+    monkeypatch.setattr(credentials, "Certificate", certificate)
+    key_path = tmp_path / "external-key.json"
+    verifier = FirebaseTokenVerifier("project-id", credentials_path=key_path)
+    try:
+        application = verifier._get_app()
+        assert application.credential is certificate.return_value
+        assert application.project_id == "project-id"
+        assert verifier._get_app() is application
+        certificate.assert_called_once_with(str(key_path))
+        adc.assert_not_called()
+        assert os.environ["GOOGLE_APPLICATION_CREDENTIALS"] == "existing-adc.json"
+    finally:
+        verifier.close()
+
+
+@pytest.mark.parametrize("adc_path", [None, "existing-adc.json"])
+def test_firebase_without_explicit_path_preserves_sdk_adc(monkeypatch, adc_path):
+    monkeypatch.delenv("FIREBASE_AUTH_EMULATOR_HOST", raising=False)
+    if adc_path is None:
+        monkeypatch.delenv("GOOGLE_APPLICATION_CREDENTIALS", raising=False)
+        monkeypatch.setenv("K_SERVICE", "deployed-api")
+    else:
+        monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", adc_path)
+    certificate = Mock(side_effect=AssertionError("No explicit key should be loaded"))
+    monkeypatch.setattr(credentials, "Certificate", certificate)
+    verifier = FirebaseTokenVerifier("project-id")
+    try:
+        application = verifier._get_app()
+        assert isinstance(application.credential, credentials.ApplicationDefault)
+        assert application.project_id == "project-id"
+        certificate.assert_not_called()
+        assert os.getenv("GOOGLE_APPLICATION_CREDENTIALS") == adc_path
+    finally:
+        verifier.close()
+
+
+@pytest.mark.parametrize(
+    "failure", ["missing", "directory", "invalid-json", "invalid-certificate", "[]", "null"]
+)
+def test_bad_admin_file_fails_closed_without_exposing_details(monkeypatch, tmp_path, failure):
+    monkeypatch.delenv("FIREBASE_AUTH_EMULATOR_HOST", raising=False)
+    key_path = tmp_path / "private-admin.json"
+    if failure == "directory":
+        key_path.mkdir()
+    elif failure == "invalid-json":
+        key_path.write_text("not json: sensitive diagnostic", encoding="utf-8")
+    elif failure == "invalid-certificate":
+        key_path.write_text(
+            '{"type": "invalid", "detail": "sensitive diagnostic"}', encoding="utf-8"
+        )
+    elif failure in {"[]", "null"}:
+        key_path.write_text(failure, encoding="utf-8")
+    adc = Mock(side_effect=AssertionError("A bad explicit key must not fall back to ADC"))
+    monkeypatch.setattr(credentials, "ApplicationDefault", adc)
+    verify = Mock(side_effect=AssertionError("No token verification after credential failure"))
+    monkeypatch.setattr(auth, "verify_id_token", verify)
+    factory = Mock(side_effect=AssertionError("No database access after credential failure"))
+    settings = Settings(
+        _env_file=None,
+        local_demo=False,
+        firebase_project_id="project-id",
+        firebase_admin_credentials_path=key_path,
+    )
+    with TestClient(create_app(settings, session_factory=factory)) as client:
+        assert client.get("/health").status_code == 200
+        response = client.get("/api/v1/me", headers={"Authorization": "Bearer token"})
+        assert response.status_code == 503
+        assert response.json() == {
+            "error": {
+                "code": "authentication_unavailable",
+                "message": "Authentication is temporarily unavailable.",
+            }
+        }
+        assert "private-admin" not in response.text
+        assert "sensitive" not in response.text
+    adc.assert_not_called()
+    verify.assert_not_called()
+    factory.assert_not_called()
 
 
 @pytest.mark.parametrize(
