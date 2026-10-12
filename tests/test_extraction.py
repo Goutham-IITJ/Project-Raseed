@@ -144,7 +144,7 @@ def test_normalization_is_deterministic_and_gtin_requires_checksum():
     assert not valid_gtin("guess")
 
 
-def test_gemini_uses_original_multimodal_bytes_structured_schema_and_configured_model():
+def test_gemini_uses_original_multimodal_bytes_and_gemini_compatible_schema():
     output = json.dumps(evidence())
 
     def respond(request):
@@ -156,8 +156,10 @@ def test_gemini_uses_original_multimodal_bytes_structured_schema_and_configured_
         assert base64.b64decode(inline["data"]) == b"original document"
         assert inline["mimeType"] == "application/pdf"
         assert "untrusted" in body["systemInstruction"]["parts"][0]["text"]
-        schema = body["generationConfig"]["responseJsonSchema"]
-        assert schema["properties"]["schema_version"]["const"] == SCHEMA_VERSION
+        schema = body["generationConfig"]["responseSchema"]
+        assert schema["properties"]["schema_version"]["enum"] == [SCHEMA_VERSION]
+        assert schema["type"] == "OBJECT"
+        assert set(schema["required"]) == set(schema["properties"])
         assert body["generationConfig"]["responseMimeType"] == "application/json"
         assert request.extensions["timeout"]["read"] == 9
         return httpx.Response(
@@ -189,6 +191,33 @@ def test_gemini_http_failures_are_classified_and_do_not_leak_provider_content(st
         adapter.extract(b"image", "image/jpeg", SCHEMA_VERSION)
     assert failure.value.retryable is retryable
     assert "sensitive" not in str(failure.value) and "secret" not in str(failure.value)
+
+
+def test_gemini_http_failure_logs_redacted_provider_details(caplog):
+    response = httpx.Response(
+        400,
+        json={
+            "error": {
+                "code": 400,
+                "status": "INVALID_ARGUMENT",
+                "message": "schema at top-level requires unspecified property",
+            }
+        },
+    )
+    adapter = GeminiReceiptExtractor(
+        "secret",
+        "model",
+        transport=httpx.MockTransport(lambda _: response),
+    )
+
+    with caplog.at_level("WARNING"):
+        with pytest.raises(ProcessingError):
+            adapter.extract(b"image", "image/jpeg", SCHEMA_VERSION)
+
+    assert "INVALID_ARGUMENT" in caplog.text
+    assert "schema at top-level requires unspecified property" in caplog.text
+    assert "secret" not in caplog.text
+    assert "image" not in caplog.text
 
 
 @pytest.mark.parametrize(
