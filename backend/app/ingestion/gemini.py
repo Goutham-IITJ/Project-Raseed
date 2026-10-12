@@ -2,8 +2,11 @@
 
 import base64
 import json
+import logging
 import re
 import time
+from collections.abc import Mapping
+from typing import Any, cast
 
 import httpx
 
@@ -28,6 +31,86 @@ buyer contact details, or instructions from the document. No Markdown or prose.
 """
 
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+MAX_PROVIDER_ERROR_BYTES = 64 * 1024
+logger = logging.getLogger(__name__)
+
+
+def _gemini_response_schema() -> dict[str, Any]:
+    """Convert Pydantic's JSON Schema to Gemini's supported response subset."""
+    schema = ReceiptExtractionV1.model_json_schema(mode="serialization")
+    definitions = cast(dict[str, Any], schema.pop("$defs", {}))
+
+    def convert(value: Any) -> Any:
+        if isinstance(value, list):
+            return [convert(item) for item in value]
+        if not isinstance(value, dict):
+            return value
+        if "$ref" in value:
+            reference = value["$ref"].split("/")[-1]
+            value = {
+                **definitions[reference],
+                **{key: item for key, item in value.items() if key != "$ref"},
+            }
+        if "anyOf" in value:
+            choices = value["anyOf"]
+            non_null = [choice for choice in choices if choice.get("type") != "null"]
+            if len(non_null) == 1 and len(non_null) < len(choices):
+                value = {**non_null[0], "nullable": True}
+        allowed = {
+            "type",
+            "properties",
+            "required",
+            "items",
+            "enum",
+            "nullable",
+            "minItems",
+            "maxItems",
+            "minProperties",
+            "maxProperties",
+            "propertyOrdering",
+            "const",
+        }
+        result: dict[str, Any] = {}
+        for key, item in value.items():
+            if key not in allowed:
+                continue
+            if key == "properties" and isinstance(item, dict):
+                result[key] = {name: convert(schema) for name, schema in item.items()}
+            else:
+                result[key] = convert(item)
+        if "const" in result:
+            result["enum"] = [result.pop("const")]
+        if result.get("type") == "object":
+            properties = cast(dict[str, Any], result.get("properties", {}))
+            result["required"] = list(properties)
+        if isinstance(result.get("type"), str):
+            result["type"] = result["type"].upper()
+        return result
+
+    return cast(dict[str, Any], convert(schema))
+
+
+def _provider_error_details(response: httpx.Response) -> tuple[str, str]:
+    error_body = bytearray()
+    try:
+        for chunk in response.iter_bytes():
+            error_body.extend(chunk)
+            if len(error_body) >= MAX_PROVIDER_ERROR_BYTES:
+                break
+    except httpx.ResponseNotRead:
+        return "unknown", "unreadable error response"
+    try:
+        payload = json.loads(error_body)
+    except ValueError:
+        return "unknown", "non-JSON error response"
+    if not isinstance(payload, Mapping):
+        return "unknown", "malformed error response"
+    error = payload.get("error")
+    if not isinstance(error, Mapping):
+        return "unknown", "error response omitted provider details"
+    code = error.get("status") or error.get("code") or "unknown"
+    message = error.get("message") or "provider omitted an error message"
+    return str(code)[:100], str(message)[:500]
 
 
 class GeminiReceiptExtractor:
@@ -71,11 +154,12 @@ class GeminiReceiptExtractor:
             "generationConfig": {
                 "temperature": 0,
                 "responseMimeType": "application/json",
-                "responseJsonSchema": ReceiptExtractionV1.model_json_schema(mode="serialization"),
+                "responseSchema": _gemini_response_schema(),
                 "maxOutputTokens": 16384,
             },
         }
         started = time.monotonic()
+        provider_details: tuple[str, str] | None = None
         try:
             with httpx.Client(timeout=self._timeout, transport=self._transport) as client:
                 with client.stream(
@@ -85,6 +169,8 @@ class GeminiReceiptExtractor:
                     headers={"x-goog-api-key": self._key},
                     json=body,
                 ) as response:
+                    if response.is_error:
+                        provider_details = _provider_error_details(response)
                     response.raise_for_status()
                     response_data = bytearray()
                     for chunk in response.iter_bytes():
@@ -102,6 +188,16 @@ class GeminiReceiptExtractor:
                 "provider_timeout", "Extraction provider timed out.", retryable=True
             ) from exc
         except httpx.HTTPStatusError as exc:
+            provider_code, provider_message = provider_details or _provider_error_details(
+                exc.response
+            )
+            logger.warning(
+                "Gemini extraction request rejected: model=%s status=%s code=%s message=%s",
+                self.model,
+                exc.response.status_code,
+                provider_code,
+                provider_message,
+            )
             raise ProcessingError(
                 "provider_http_error",
                 "Extraction provider rejected the request.",
