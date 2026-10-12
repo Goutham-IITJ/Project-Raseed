@@ -68,7 +68,9 @@ def create_app(
     token_verifier = verifier or (
         LocalDemoVerifier(config)
         if demo_enabled
-        else FirebaseTokenVerifier(config.firebase_project_id)
+        else FirebaseTokenVerifier(
+            config.firebase_project_id, credentials_path=config.firebase_admin_credentials_path
+        )
     )
 
     @asynccontextmanager
